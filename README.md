@@ -41,6 +41,12 @@ The results between GPU-accelerated and CPU-only platforms are **highly consiste
 * **Validated Accuracy:** Rigorous validation against canonical 2D and 3D benchmarks. Results are consistent with CPU-only calculations down to the floating-point round-off level.
 
 ---
+## 📚 Citation
+
+If you use **IMEXLBM** in your research, please cite the following publications:
+
+### Key Publications
+> [1] **Zhao, C., Patel, S., Balakrishnan, R. and Lee, T., 2025.** IMEXLBM: A portable lattice-Boltzmann solver for heterogeneous platforms. In *Fluids Engineering Division Summer Meeting* (Vol. 88995, p. V001T03A016). American Society of Mechanical Engineers.
 
 ## 🛠️ Installation
 
