@@ -6,7 +6,8 @@ namespace
 {
 constexpr int Q27 = 27;
 
-constexpr double LB_W[Q27] = {
+KOKKOS_INLINE_FUNCTION double LB_W(const int a)
+{constexpr double w[Q27] = {
     8.0 / 27.0,
     2.0 / 27.0, 2.0 / 27.0, 2.0 / 27.0, 2.0 / 27.0, 2.0 / 27.0, 2.0 / 27.0,
     1.0 / 54.0, 1.0 / 54.0, 1.0 / 54.0, 1.0 / 54.0,
@@ -14,8 +15,10 @@ constexpr double LB_W[Q27] = {
     1.0 / 54.0, 1.0 / 54.0, 1.0 / 54.0, 1.0 / 54.0,
     1.0 / 216.0, 1.0 / 216.0, 1.0 / 216.0, 1.0 / 216.0,
     1.0 / 216.0, 1.0 / 216.0, 1.0 / 216.0, 1.0 / 216.0};
-
-constexpr int LB_E[Q27][3] = {
+  return w[a];
+}
+KOKKOS_INLINE_FUNCTION int LB_E(const int a, const int d) 
+{constexpr int e[Q27][3] = {
     {0, 0, 0},
     {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1},
     {1, 1, 0}, {-1, -1, 0}, {1, -1, 0}, {-1, 1, 0},
@@ -23,6 +26,8 @@ constexpr int LB_E[Q27][3] = {
     {0, 1, 1}, {0, -1, -1}, {0, 1, -1}, {0, -1, 1},
     {1, 1, 1}, {-1, -1, -1}, {1, -1, 1}, {-1, 1, -1},
     {1, 1, -1}, {-1, -1, 1}, {1, -1, -1}, {-1, 1, 1}};
+   return e[a][d];
+}
 
 constexpr int LB_OPP[Q27] = {
     0, 2, 1, 4, 3, 6, 5,
@@ -111,7 +116,7 @@ void LBM::Collision()
 
     Kokkos::parallel_for(
         "collision",
-        mdrange_policy4({0, l_s[0], l_s[1], l_s[2]}, {q, l_e[0], l_e[1], l_e[2]}),
+        mdrange_policy4({0, l_s[0], l_s[1], l_s[2]}, {q, l_e[0], l_e[1], l_e[2]},{1,1,2,64}),
         KOKKOS_CLASS_LAMBDA(const int ii, const int i, const int j, const int k) {
             const double u = ua(i, j, k), v = va(i, j, k), w = wa(i, j, k);
             const double edu = LB_E[ii][0] * u + LB_E[ii][1] * v + LB_E[ii][2] * w;
@@ -130,7 +135,7 @@ void LBM::Streaming()
 
     Kokkos::parallel_for(
         "stream1",
-        mdrange_policy4({0, ghost, ghost, ghost}, {q, lx - ghost, ly - ghost, lz - ghost}),
+        mdrange_policy4({0, ghost, ghost, ghost}, {q, lx - ghost, ly - ghost, lz - ghost},{1,1,2,64}),
         KOKKOS_CLASS_LAMBDA(const int ii, const int i, const int j, const int k) {
             ft(ii, i, j, k) = f(ii, i - LB_E[ii][0], j - LB_E[ii][1], k - LB_E[ii][2]);
         });
@@ -144,7 +149,7 @@ void LBM::Update()
 
     Kokkos::parallel_for(
         "moments",
-        mdrange_policy3({ghost, ghost, ghost}, {lx - ghost, ly - ghost, lz - ghost}),
+        mdrange_policy3({ghost, ghost, ghost}, {lx - ghost, ly - ghost, lz - ghost},{1,1,2,64}),
         KOKKOS_CLASS_LAMBDA(const int i, const int j, const int k) {
             double pl = 0.0, ul = 0.0, vl = 0.0, wl = 0.0;
 #pragma unroll
