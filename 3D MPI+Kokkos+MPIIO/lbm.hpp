@@ -25,14 +25,15 @@ typedef Kokkos::TeamPolicy<> team_policy;
 typedef Kokkos::TeamPolicy<>::member_type member_type;
 typedef Kokkos::RangePolicy<> range_policy;
 typedef Kokkos::MDRangePolicy<Kokkos::Rank<2>> mdrange_policy2;
-typedef Kokkos::MDRangePolicy<Kokkos::Rank<3>> mdrange_policy3;
-typedef Kokkos::MDRangePolicy<Kokkos::Rank<4>> mdrange_policy4;
+using mdrange_policy4 = Kokkos::MDRangePolicy<Kokkos::Rank<4, Kokkos::Iterate::Right, Kokkos::Iterate::Right>>;
+using mdrange_policy3 = Kokkos::MDRangePolicy<Kokkos::Rank<3, Kokkos::Iterate::Right, Kokkos::Iterate::Right>>;
 
-using buffer_f = Kokkos::View<double ****, Kokkos::CudaSpace>;
-using buffer_u = Kokkos::View<double ***, Kokkos::CudaSpace>;
-using buffer_div = Kokkos::View<double ***, Kokkos::CudaSpace>;
-using buffer_pack_f = Kokkos::View<double ****, Kokkos::CudaSpace>;
-using buffer_pack_u = Kokkos::View<double ***, Kokkos::CudaSpace>;
+using buffer_f      = Kokkos::View<double ****, Kokkos::LayoutRight, Kokkos::CudaSpace>;
+using buffer_u      = Kokkos::View<double ***,  Kokkos::LayoutRight, Kokkos::CudaSpace>;
+using buffer_div    = Kokkos::View<double ***,  Kokkos::LayoutRight, Kokkos::CudaSpace>;
+using buffer_pack_f = Kokkos::View<double ****, Kokkos::LayoutRight, Kokkos::CudaSpace>;
+using buffer_pack_u = Kokkos::View<double ***,  Kokkos::LayoutRight, Kokkos::CudaSpace>;
+
 
 
 struct LBM
