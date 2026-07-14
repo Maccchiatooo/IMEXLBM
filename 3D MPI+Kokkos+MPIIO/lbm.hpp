@@ -164,33 +164,16 @@ struct LBM
         int x_his[comm.rx];
         int y_his[comm.ry];
         int z_his[comm.rz];
-
-        MPI_Allgather(l_l, 1, MPI_INT, x_his, 1, MPI_INT, comm.comm);
-        for (int i = 0; i <= comm.px; i++)
-        {
-            x_hi += x_his[i];
-        }
-        x_lo = x_hi - l_l[0];
-        x_hi = x_hi - 1;
-        MPI_Barrier(MPI_COMM_WORLD);
-        MPI_Allgather(l_l + 1, 1, MPI_INT, y_his, 1, MPI_INT, comm.comm);
-        for (int j = 0; j <= comm.py; j++)
-        {
-            y_hi += y_his[j];
-        }
-        y_lo = y_hi - l_l[1];
-        y_hi = y_hi - 1;
-        MPI_Barrier(MPI_COMM_WORLD);
-        MPI_Allgather(l_l + 2, 1, MPI_INT, z_his, 1, MPI_INT, comm.comm);
-
-        for (int k = 0; k <= comm.pz; k++)
-        {
-            z_hi += z_his[k];
-        }
-        // local low and local high
-        z_lo = z_hi - l_l[2];
-        z_hi = z_hi - 1;
-        MPI_Barrier(MPI_COMM_WORLD);
+        auto block_lo = [](int gl, int r, int pcoord) {
+            const int base = gl / r, rem = gl % r;
+            return pcoord * base + (pcoord < rem ? pcoord : rem);
+        };
+        x_lo = block_lo(glx, comm.rx, comm.px);
+        x_hi = x_lo + l_l[0] - 1;
+        y_lo = block_lo(gly, comm.ry, comm.py);
+        y_hi = y_lo + l_l[1] - 1;
+        z_lo = block_lo(glz, comm.rz, comm.pz);
+        z_hi = z_lo + l_l[2] - 1;
     };
 
     void Initialize();
