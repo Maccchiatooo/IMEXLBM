@@ -1,5 +1,33 @@
 #include "lbm.hpp"
 
+namespace
+{
+constexpr int Q27 = 27;
+
+constexpr double LB_W[Q27] = {
+    8.0 / 27.0,
+    2.0 / 27.0, 2.0 / 27.0, 2.0 / 27.0, 2.0 / 27.0, 2.0 / 27.0, 2.0 / 27.0,
+    1.0 / 54.0, 1.0 / 54.0, 1.0 / 54.0, 1.0 / 54.0,
+    1.0 / 54.0, 1.0 / 54.0, 1.0 / 54.0, 1.0 / 54.0,
+    1.0 / 54.0, 1.0 / 54.0, 1.0 / 54.0, 1.0 / 54.0,
+    1.0 / 216.0, 1.0 / 216.0, 1.0 / 216.0, 1.0 / 216.0,
+    1.0 / 216.0, 1.0 / 216.0, 1.0 / 216.0, 1.0 / 216.0};
+
+constexpr int LB_E[Q27][3] = {
+    {0, 0, 0},
+    {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1},
+    {1, 1, 0}, {-1, -1, 0}, {1, -1, 0}, {-1, 1, 0},
+    {1, 0, 1}, {-1, 0, -1}, {1, 0, -1}, {-1, 0, 1},
+    {0, 1, 1}, {0, -1, -1}, {0, 1, -1}, {0, -1, 1},
+    {1, 1, 1}, {-1, -1, -1}, {1, -1, 1}, {-1, 1, -1},
+    {1, 1, -1}, {-1, -1, 1}, {1, -1, -1}, {-1, 1, 1}};
+
+constexpr int LB_OPP[Q27] = {
+    0, 2, 1, 4, 3, 6, 5,
+    8, 7, 10, 9, 12, 11, 14, 13, 16, 15, 18, 17,
+    20, 19, 22, 21, 24, 23, 26, 25};
+}
+
 void LBM::Initialize()
 {
 
@@ -9,7 +37,7 @@ void LBM::Initialize()
 
     ua = Kokkos::View<double ***, Kokkos::CudaUVMSpace>("u", lx, ly, lz);
     va = Kokkos::View<double ***, Kokkos::CudaUVMSpace>("v", lx, ly, lz);
-    wa = Kokkos::View<double ***, Kokkos::CudaUVMSpace>("v", lx, ly, lz);
+    wa = Kokkos::View<double ***, Kokkos::CudaUVMSpace>("w", lx, ly, lz);
     rho = Kokkos::View<double ***, Kokkos::CudaUVMSpace>("rho", lx, ly, lz);
     p = Kokkos::View<double ***, Kokkos::CudaUVMSpace>("p", lx, ly, lz);
 
@@ -19,171 +47,13 @@ void LBM::Initialize()
     ran = Kokkos::View<int ***, Kokkos::CudaUVMSpace>("ran", lx, ly, lz);
     bb = Kokkos::View<int *, Kokkos::CudaUVMSpace>("b", q);
 
-    //  weight function
-    t(0) = 8.0 / 27.0;
-    t(1) = 2.0 / 27.0;
-    t(2) = 2.0 / 27.0;
-    t(3) = 2.0 / 27.0;
-    t(4) = 2.0 / 27.0;
-    t(5) = 2.0 / 27.0;
-    t(6) = 2.0 / 27.0;
-    t(7) = 1.0 / 54.0;
-    t(8) = 1.0 / 54.0;
-    t(9) = 1.0 / 54.0;
-    t(10) = 1.0 / 54.0;
-    t(11) = 1.0 / 54.0;
-    t(12) = 1.0 / 54.0;
-    t(13) = 1.0 / 54.0;
-    t(14) = 1.0 / 54.0;
-    t(15) = 1.0 / 54.0;
-    t(16) = 1.0 / 54.0;
-    t(17) = 1.0 / 54.0;
-    t(18) = 1.0 / 54.0;
-    t(19) = 1.0 / 216.0;
-    t(20) = 1.0 / 216.0;
-    t(21) = 1.0 / 216.0;
-    t(22) = 1.0 / 216.0;
-    t(23) = 1.0 / 216.0;
-    t(24) = 1.0 / 216.0;
-    t(25) = 1.0 / 216.0;
-    t(26) = 1.0 / 216.0;
-    // bounce back directions
-    bb(0) = 0;
-    bb(1) = 2;
-    bb(2) = 1;
-    bb(3) = 4;
-    bb(4) = 3;
-    bb(5) = 6;
-    bb(6) = 5;
-    bb(7) = 8;
-    bb(8) = 7;
-    bb(9) = 10;
-    bb(10) = 9;
-    bb(11) = 12;
-    bb(12) = 11;
-    bb(13) = 14;
-    bb(14) = 13;
-    bb(15) = 16;
-    bb(16) = 15;
-    bb(17) = 18;
-    bb(18) = 17;
-    bb(19) = 20;
-    bb(20) = 19;
-    bb(21) = 22;
-    bb(22) = 21;
-    bb(23) = 24;
-    bb(24) = 23;
-    bb(25) = 26;
-    bb(26) = 25;
-
-    // discrete velocity
-    e(0, 0) = 0;
-    e(0, 1) = 0;
-    e(0, 2) = 0;
-
-    e(1, 0) = 1;
-    e(1, 1) = 0;
-    e(1, 2) = 0;
-
-    e(2, 0) = -1;
-    e(2, 1) = 0;
-    e(2, 2) = 0;
-
-    e(3, 0) = 0;
-    e(3, 1) = 1;
-    e(3, 2) = 0;
-
-    e(4, 0) = 0;
-    e(4, 1) = -1;
-    e(4, 2) = 0;
-
-    e(5, 0) = 0;
-    e(5, 1) = 0;
-    e(5, 2) = 1;
-
-    e(6, 0) = 0;
-    e(6, 1) = 0;
-    e(6, 2) = -1;
-
-    e(7, 0) = 1;
-    e(7, 1) = 1;
-    e(7, 2) = 0;
-
-    e(8, 0) = -1;
-    e(8, 1) = -1;
-    e(8, 2) = 0;
-
-    e(9, 0) = 1;
-    e(9, 1) = -1;
-    e(9, 2) = 0;
-
-    e(10, 0) = -1;
-    e(10, 1) = 1;
-    e(10, 2) = 0;
-
-    e(11, 0) = 1;
-    e(11, 1) = 0;
-    e(11, 2) = 1;
-
-    e(12, 0) = -1;
-    e(12, 1) = 0;
-    e(12, 2) = -1;
-
-    e(13, 0) = 1;
-    e(13, 1) = 0;
-    e(13, 2) = -1;
-
-    e(14, 0) = -1;
-    e(14, 1) = 0;
-    e(14, 2) = 1;
-
-    e(15, 0) = 0;
-    e(15, 1) = 1;
-    e(15, 2) = 1;
-
-    e(16, 0) = 0;
-    e(16, 1) = -1;
-    e(16, 2) = -1;
-
-    e(17, 0) = 0;
-    e(17, 1) = 1;
-    e(17, 2) = -1;
-
-    e(18, 0) = 0;
-    e(18, 1) = -1;
-    e(18, 2) = 1;
-
-    e(19, 0) = 1;
-    e(19, 1) = 1;
-    e(19, 2) = 1;
-
-    e(20, 0) = -1;
-    e(20, 1) = -1;
-    e(20, 2) = -1;
-
-    e(21, 0) = 1;
-    e(21, 1) = -1;
-    e(21, 2) = 1;
-
-    e(22, 0) = -1;
-    e(22, 1) = 1;
-    e(22, 2) = -1;
-
-    e(23, 0) = 1;
-    e(23, 1) = 1;
-    e(23, 2) = -1;
-
-    e(24, 0) = -1;
-    e(24, 1) = -1;
-    e(24, 2) = 1;
-
-    e(25, 0) = 1;
-    e(25, 1) = -1;
-    e(25, 2) = -1;
-
-    e(26, 0) = -1;
-    e(26, 1) = 1;
-    e(26, 2) = 1;
+    for (int a = 0; a < q; ++a)
+    {
+        t(a) = LB_W[a];
+        bb(a) = LB_OPP[a];
+        for (int d = 0; d < dim; ++d)
+            e(a, d) = LB_E[a][d];
+    }
 
     // macroscopic value initialization
 
@@ -200,11 +70,15 @@ void LBM::Initialize()
     // distribution function initialization
     Kokkos::parallel_for(
         "initf", mdrange_policy4({0, 0, 0, 0}, {q, lx, ly, lz}), KOKKOS_CLASS_LAMBDA(const int ii, const int i, const int j, const int k) {
-            double edu = e(ii, 0) * ua(i, j, k) + e(ii, 1) * va(i, j, k) + e(ii, 2) * wa(i, j, k);
-            double udu = pow(ua(i, j, k), 2) + pow(va(i, j, k), 2) + pow(wa(i, j, k), 2);
-            double eu2 = pow((e(ii, 0) * ua(i, j, k) + e(ii, 1) * va(i, j, k) + e(ii, 2) * wa(i, j, k)), 2);
 
-            f(ii, i, j, k) = t(ii) * p(i, j, k) * 3.0 + t(ii) * (3.0 * edu + 4.5 * eu2 - 1.5 * udu);
+            const double u = ua(i, j, k);
+            const double v = va(i, j, k);
+            const double w = wa(i, j, k);
+            const double edu = LB_E[ii][0] * u + LB_E[ii][1] * v + LB_E[ii][2] * w;
+            const double udu = u * u + v * v + w * w;
+
+            f(ii, i, j, k) =
+                LB_W[ii] * (3.0 * p(i, j, k) + 3.0 * edu + 4.5 * edu * edu - 1.5 * udu);
 
             ft(ii, i, j, k) = 0;
         });
@@ -217,15 +91,17 @@ void LBM::Collision()
 
     Kokkos::parallel_for(
         "collision", mdrange_policy4({0, l_s[0], l_s[1], l_s[2]}, {q, l_e[0], l_e[1], l_e[2]}), KOKKOS_CLASS_LAMBDA(const int ii, const int i, const int j, const int k) {
-            double edu = e(ii, 0) * ua(i, j, k) + e(ii, 1) * va(i, j, k) + e(ii, 2) * wa(i, j, k);
-            double udu = pow(ua(i, j, k), 2) + pow(va(i, j, k), 2) + pow(wa(i, j, k), 2);
-            double eu2 = pow((e(ii, 0) * ua(i, j, k) + e(ii, 1) * va(i, j, k) + e(ii, 2) * wa(i, j, k)), 2);
+            const double u = ua(i, j, k);
+            const double v = va(i, j, k);
+            const double w = wa(i, j, k);
+            const double edu = LB_E[ii][0] * u + LB_E[ii][1] * v + LB_E[ii][2] * w;
+            const double udu = u * u + v * v + w * w;
 
-            double feq = t(ii) * p(i, j, k) * 3.0 + t(ii) * (3.0 * edu + 4.5 * eu2 - 1.5 * udu);
+            const double feq =
+                LB_W[ii] * (3.0 * p(i, j, k) + 3.0 * edu + 4.5 * edu * edu - 1.5 * udu);
 
-            f(ii, i, j, k) -= (f(ii, i, j, k) - feq) / (tau0 + 0.5);
+            f(ii, i, j, k) -= (f(ii, i, j, k) - feq) * inv_tau;
         });
-    Kokkos::fence();
 };
 
 void LBM::Streaming()
@@ -234,9 +110,10 @@ void LBM::Streaming()
     {
         Kokkos::parallel_for(
             "bcl", mdrange_policy3({0, ghost - 1, ghost - 1}, {q, ly - ghost + 1, lz - ghost + 1}), KOKKOS_CLASS_LAMBDA(const int ii, const int j, const int k) {
-                if (e(ii, 0) > 0)
+                if (LB_E[ii][0] > 0)
                 {
-                    f(ii, l_s[0] - 1, j, k) = f(bb(ii), l_s[0] + 1, j + 2 * e(ii, 1), k + 2 * e(ii, 2));
+                    f(ii, l_s[0] - 1, j, k) =
+                        f(LB_OPP[ii], l_s[0] + 1, j + 2 * LB_E[ii][1], k + 2 * LB_E[ii][2]);
                 }
             });
     }
@@ -245,9 +122,9 @@ void LBM::Streaming()
     {
         Kokkos::parallel_for(
             "bcr", mdrange_policy3({0, ghost - 1, ghost - 1}, {q, ly - ghost + 1, lz - ghost + 1}), KOKKOS_CLASS_LAMBDA(const int ii, const int j, const int k) {
-                if (e(ii, 0) < 0)
                 {
-                    f(ii, l_e[0], j, k) = f(bb(ii), l_e[0] - 2, j + 2 * e(ii, 1), k + 2 * e(ii, 2));
+                    f(ii, l_e[0], j, k) =
+                        f(LB_OPP[ii], l_e[0] - 2, j + 2 * LB_E[ii][1], k + 2 * LB_E[ii][2]);
                 }
             });
     }
@@ -256,9 +133,10 @@ void LBM::Streaming()
     {
         Kokkos::parallel_for(
             "bcf", mdrange_policy3({0, ghost - 1, ghost - 1}, {q, lx - ghost + 1, lz - ghost + 1}), KOKKOS_CLASS_LAMBDA(const int ii, const int i, const int k) {
-                if (e(ii, 1) > 0)
+                if (LB_E[ii][1] > 0)
                 {
-                    f(ii, i, l_s[1] - 1, k) = f(bb(ii), i + 2 * e(ii, 0), l_s[1] + 1, k + 2 * e(ii, 2));
+                    f(ii, i, l_s[1] - 1, k) =
+                        f(LB_OPP[ii], i + 2 * LB_E[ii][0], l_s[1] + 1, k + 2 * LB_E[ii][2]);
                 }
             });
     }
@@ -268,9 +146,10 @@ void LBM::Streaming()
     {
         Kokkos::parallel_for(
             "bcb", mdrange_policy3({0, ghost - 1, ghost - 1}, {q, lx - ghost + 1, lz - ghost + 1}), KOKKOS_CLASS_LAMBDA(const int ii, const int i, const int k) {
-                if (e(ii, 1) < 0)
+                if (LB_E[ii][1] < 0)
                 {
-                    f(ii, i, l_e[1], k) = f(bb(ii), i + 2 * e(ii, 0), l_e[1] - 2, k + 2 * e(ii, 2));
+                    f(ii, i, l_e[1], k) =
+                        f(LB_OPP[ii], i + 2 * LB_E[ii][0], l_e[1] - 2, k + 2 * LB_E[ii][2]);
                 }
             });
     }
@@ -280,10 +159,10 @@ void LBM::Streaming()
     {
         Kokkos::parallel_for(
             "bcd", mdrange_policy3({0, ghost - 1, ghost - 1}, {q, lx - ghost + 1, ly - ghost + 1}), KOKKOS_CLASS_LAMBDA(const int ii, const int i, const int j) {
-                if (e(ii, 2) > 0)
+                if (LB_E[ii][2] > 0)
                 {
-
-                    f(ii, i, j, l_s[2] - 1) = f(bb(ii), i + 2 * e(ii, 0), j + 2 * e(ii, 1), l_s[2] + 1);
+                    f(ii, i, j, l_s[2] - 1) =
+                        f(LB_OPP[ii], i + 2 * LB_E[ii][0], j + 2 * LB_E[ii][1], l_s[2] + 1);
                 }
             });
     }
@@ -293,57 +172,60 @@ void LBM::Streaming()
     {
         Kokkos::parallel_for(
             "bcu", mdrange_policy3({0, ghost - 1, ghost - 1}, {q, lx - ghost + 1, ly - ghost + 1}), KOKKOS_CLASS_LAMBDA(const int ii, const int i, const int j) {
-                if (e(ii, 2) < 0)
+                if (LB_E[ii][2] < 0)
                 {
-                    f(ii, i, j, l_e[2]) = f(bb(ii), i + 2 * e(ii, 0), j + e(ii, 1), l_e[2] - 2);
+                    f(ii, i, j, l_e[2]) =
+                        f(LB_OPP[ii], i + 2 * LB_E[ii][0], j + 2 * LB_E[ii][1], l_e[2] - 2);
                 }
             });
     }
 
     // streaming process
     Kokkos::parallel_for(
-        "stream1", mdrange_policy4({0, ghost, ghost, ghost}, {q, lx - ghost, ly - ghost, lz - ghost}), KOKKOS_CLASS_LAMBDA(const int ii, const int i, const int j, const int k) {
-            ft(ii, i, j, k) = f(ii, i - e(ii, 0), j - e(ii, 1), k - e(ii, 2));
+        "stream1",
+        mdrange_policy4({0, ghost, ghost, ghost}, {q, lx - ghost, ly - ghost, lz - ghost}),
+        KOKKOS_CLASS_LAMBDA(const int ii, const int i, const int j, const int k) {
+            ft(ii, i, j, k) = f(ii, i - LB_E[ii][0], j - LB_E[ii][1], k - LB_E[ii][2]);
         });
 
     Kokkos::fence();
-
-    Kokkos::parallel_for(
-        "stream2", mdrange_policy4({0, ghost, ghost, ghost}, {q, lx - ghost, ly - ghost, lz - ghost}), KOKKOS_CLASS_LAMBDA(const int ii, const int i, const int j, const int k) {
-            f(ii, i, j, k) = ft(ii, i, j, k);
-        });
-
-    Kokkos::fence();
+    std::swap(f, ft);
 };
 
 void LBM::Update()
 {
-    Kokkos::parallel_for(
-        "post", mdrange_policy3({0, 0, 0}, {lx, ly, lz}), KOKKOS_CLASS_LAMBDA(const int i, const int j, const int k) {
-            ua(i, j, k) = 0;
-            va(i, j, k) = 0;
-            wa(i, j, k) = 0;
-            p(i, j, k) = 0;
-        });
-    Kokkos::fence();
-    for (int k = ghost; k < lz - ghost; k++)
-    {
-        for (int j = ghost; j < ly - ghost; j++)
-        {
-            for (int i = ghost; i < lx - ghost; i++)
-            {
-                for (int ii = 0; ii < q; ii++)
-                {
-                    p(i, j, k) = p(i, j, k) + f(ii, i, j, k) / 3.0;
 
-                    ua(i, j, k) = ua(i, j, k) + f(ii, i, j, k) * e(ii, 0);
-                    va(i, j, k) = va(i, j, k) + f(ii, i, j, k) * e(ii, 1);
-                    wa(i, j, k) = wa(i, j, k) + f(ii, i, j, k) * e(ii, 2);
-                }
-                if (z_hi == glz - 1)
-                    ua(i, j, l_e[2] - 1) = 0.1;
+
+    Kokkos::parallel_for(
+        "moments",
+        mdrange_policy3({ghost, ghost, ghost}, {lx - ghost, ly - ghost, lz - ghost}),
+        KOKKOS_CLASS_LAMBDA(const int i, const int j, const int k) {
+            double pl = 0.0, ul = 0.0, vl = 0.0, wl = 0.0;
+#pragma unroll
+            for (int ii = 0; ii < Q27; ++ii) // D3Q27: q is 27 by construction
+            {
+                const double fv = f(ii, i, j, k);
+                pl += fv;
+                ul += fv * LB_E[ii][0];
+                vl += fv * LB_E[ii][1];
+                wl += fv * LB_E[ii][2];
             }
-        }
+            p(i, j, k) = pl * (1.0 / 3.0);
+            ua(i, j, k) = ul;
+            va(i, j, k) = vl;
+            wa(i, j, k) = wl;
+        });
+
+    
+    if (z_hi == glz - 1)
+    {
+        const int kk = l_e[2] - 1;
+        Kokkos::parallel_for(
+            "lid_bc",
+            Kokkos::MDRangePolicy<Kokkos::Rank<2>>({ghost, ghost}, {lx - ghost, ly - ghost}),
+            KOKKOS_CLASS_LAMBDA(const int i, const int j) {
+                ua(i, j, kk) = 0.1;
+            });
     }
     Kokkos::fence();
 };
