@@ -94,16 +94,13 @@ void LBM::Initialize()
     Kokkos::parallel_for(
         "initf", mdrange_policy4({0, 0, 0, 0}, {q, lx, ly, lz}), KOKKOS_CLASS_LAMBDA(const int ii, const int i, const int j, const int k) {
 
-            const double u = ua(i, j, k);
-            const double v = va(i, j, k);
-            const double w = wa(i, j, k);
-            const double edu = LB_E[ii][0] * u + LB_E[ii][1] * v + LB_E[ii][2] * w;
+            const double u = ua(i, j, k), v = va(i, j, k), w = wa(i, j, k);
+            const double edu = e(ii,0) * u + e(ii,1) * v + e(ii,2) * w;
             const double udu = u * u + v * v + w * w;
 
             f(ii, i, j, k) =
-                LB_W[ii] * (3.0 * p(i, j, k) + 3.0 * edu + 4.5 * edu * edu - 1.5 * udu);
-
-            ft(ii, i, j, k) = 0;
+                t(ii) * (3.0 * p(i, j, k) + 3.0 * edu + 4.5 * edu * edu - 1.5 * udu);
+            ft(ii, i, j, k) = 0.0;
         });
 
     Kokkos::fence();
@@ -119,11 +116,11 @@ void LBM::Collision()
         mdrange_policy4({0, l_s[0], l_s[1], l_s[2]}, {q, l_e[0], l_e[1], l_e[2]},{1,1,2,64}),
         KOKKOS_CLASS_LAMBDA(const int ii, const int i, const int j, const int k) {
             const double u = ua(i, j, k), v = va(i, j, k), w = wa(i, j, k);
-            const double edu = LB_E[ii][0] * u + LB_E[ii][1] * v + LB_E[ii][2] * w;
+            const double edu = e(ii,0) * u + e(ii,1) * v + e(ii,2) * w;
             const double udu = u * u + v * v + w * w;
 
             const double feq =
-                LB_W[ii] * (3.0 * p(i, j, k) + 3.0 * edu + 4.5 * edu * edu - 1.5 * udu);
+                t(ii) *  (3.0 * p(i, j, k) + 3.0 * edu + 4.5 * edu * edu - 1.5 * udu);
 
             f(ii, i, j, k) -= (f(ii, i, j, k) - feq) * inv_tau;
         });
@@ -137,7 +134,7 @@ void LBM::Streaming()
         "stream1",
         mdrange_policy4({0, ghost, ghost, ghost}, {q, lx - ghost, ly - ghost, lz - ghost},{1,1,2,64}),
         KOKKOS_CLASS_LAMBDA(const int ii, const int i, const int j, const int k) {
-            ft(ii, i, j, k) = f(ii, i - LB_E[ii][0], j - LB_E[ii][1], k - LB_E[ii][2]);
+            ft(ii, i, j, k) = f(ii, i - e(ii,0), j - e(ii,1), k - e(ii,2));
         });
     Kokkos::fence();
     std::swap(f, ft);
@@ -157,9 +154,9 @@ void LBM::Update()
             {
                 const double fv = f(ii, i, j, k);
                 pl += fv;
-                ul += fv * LB_E[ii][0];
-                vl += fv * LB_E[ii][1];
-                wl += fv * LB_E[ii][2];
+                ul += fv * e(ii,0);
+                vl += fv * e(ii,1);
+                wl += fv * e(ii,2);
             }
             p(i, j, k) = pl * (1.0 / 3.0);
             ua(i, j, k) = ul;
