@@ -31,21 +31,21 @@ constexpr int LB_OPP[Q27] = {
 void LBM::Initialize()
 {
 
-    f = Kokkos::View<double ****, Kokkos::CudaUVMSpace>("f", q, lx, ly, lz);
-    ft = Kokkos::View<double ****, Kokkos::CudaUVMSpace>("ft", q, lx, ly, lz);
-    fb = Kokkos::View<double ****, Kokkos::CudaUVMSpace>("fb", q, lx, ly, lz);
-
-    ua = Kokkos::View<double ***, Kokkos::CudaUVMSpace>("u", lx, ly, lz);
-    va = Kokkos::View<double ***, Kokkos::CudaUVMSpace>("v", lx, ly, lz);
-    wa = Kokkos::View<double ***, Kokkos::CudaUVMSpace>("w", lx, ly, lz);
-    rho = Kokkos::View<double ***, Kokkos::CudaUVMSpace>("rho", lx, ly, lz);
-    p = Kokkos::View<double ***, Kokkos::CudaUVMSpace>("p", lx, ly, lz);
-
-    e = Kokkos::View<int **, Kokkos::CudaUVMSpace>("e", q, dim);
-    t = Kokkos::View<double *, Kokkos::CudaUVMSpace>("t", q);
-    usr = Kokkos::View<int ***, Kokkos::CudaUVMSpace>("usr", lx, ly, lz);
-    ran = Kokkos::View<int ***, Kokkos::CudaUVMSpace>("ran", lx, ly, lz);
-    bb = Kokkos::View<int *, Kokkos::CudaUVMSpace>("b", q);
+    f = decltype(f)("f", q, lx, ly, lz);
+    ft = decltype(ft)("ft", q, lx, ly, lz);
+    fb = decltype(fb)("fb", q, lx, ly, lz);
+ 
+    ua = decltype(ua)("u", lx, ly, lz);
+    va = decltype(va)("v", lx, ly, lz);
+    wa = decltype(wa)("w", lx, ly, lz);
+    rho = decltype(rho)("rho", lx, ly, lz);
+    p = decltype(p)("p", lx, ly, lz);
+ 
+    e = decltype(e)("e", q, dim);
+    t = decltype(t)("t", q);
+    usr = decltype(usr)("usr", lx, ly, lz);
+    ran = decltype(ran)("ran", lx, ly, lz);
+    bb = decltype(bb)("b", q);
 
     for (int a = 0; a < q; ++a)
     {
