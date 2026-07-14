@@ -23,24 +23,32 @@ int main(int argc, char *argv[])
 
         l1.Initialize();
 
-        l1.MPIoutput(0);
-        l1.setup_subdomain();
-        start = MPI_Wtime();
+        Kokkos::fence();
+        MPI_Barrier(MPI_COMM_WORLD);
+        double start = MPI_Wtime();
+        double t_last = start;
+        
         for (int it = 1; it <= s1.Time; it++)
         {
             l1.Collision();
-            l1.pack();
-            l1.exchange();
-            l1.unpack();
             l1.Streaming();
-
             l1.Update();
             end = MPI_Wtime();
             if (it % s1.inter == 0)
             {
-                l1.MPIoutput(it / s1.inter);
-                if (l1.comm.me == 0)
-                    printf("time=%f\n", end - start);
+                Kokkos::fence();
+                MPI_Barrier(MPI_COMM_WORLD);
+                const double now = MPI_Wtime();
+                if (l1.me == 0)
+                {
+                    const double dt_int = now - t_last;
+                    const double mlups = (double)s1.sx * s1.sy * s1.sz *
+                                         s1.inter / dt_int / 1.0e6;
+                    printf("step %6d | interval %8.4f s | total %8.4f s | %10.2f MLUPS\n",
+                           it, dt_int, now - start, mlups);
+                }
+                t_last = now;
+                // l1.MPIoutput(it / s1.inter);
             }
         }
     }
