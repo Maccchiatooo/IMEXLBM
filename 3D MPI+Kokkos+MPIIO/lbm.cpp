@@ -274,72 +274,46 @@ void LBM::MPIoutput(int n)
             }
         }
     }
+    Kokkos::parallel_reduce(
+        "minmax_uvwp",
+        mdrange_policy3({ghost, ghost, ghost}, {l_e[0], l_e[1], l_e[2]}),
+        KOKKOS_CLASS_LAMBDA(const int i, const int j, const int k,
+                            double &umx, double &vmx, double &wmx, double &pmx,
+                            double &umn, double &vmn, double &wmn, double &pmn) {
+            const double u = ua(i, j, k);
+            const double v = va(i, j, k);
+            const double w = wa(i, j, k);
+            const double pv = p(i, j, k);
+            if (u > umx) umx = u;
+            if (v > vmx) vmx = v;
+            if (w > wmx) wmx = w;
+            if (pv > pmx) pmx = pv;
+            if (u < umn) umn = u;
+            if (v < vmn) vmn = v;
+            if (w < wmn) wmn = w;
+            if (pv < pmn) pmn = pv;
+        },
+        Kokkos::Max<double>(umax), Kokkos::Max<double>(vmax),
+        Kokkos::Max<double>(wmax), Kokkos::Max<double>(pmax),
+        Kokkos::Min<double>(umin), Kokkos::Min<double>(vmin),
+        Kokkos::Min<double>(wmin), Kokkos::Min<double>(pmin));
+    Kokkos::fence();
 
-    parallel_reduce(
-        " Label", mdrange_policy3({ghost, ghost, ghost}, {l_e[0], l_e[1], l_e[2]}),
-        KOKKOS_CLASS_LAMBDA(const int i, const int j, const int k, double &valueToUpdate) {
-         double my_value = ua(i,j,k);
-         if(my_value > valueToUpdate ) valueToUpdate = my_value; }, Kokkos ::Max<double>(umax));
-    Kokkos::fence();
-    parallel_reduce(
-        " Label", mdrange_policy3({ghost, ghost, ghost}, {l_e[0], l_e[1], l_e[2]}),
-        KOKKOS_CLASS_LAMBDA(const int i, const int j, const int k, double &valueToUpdate) {
-         double my_value = va(i,j,k);
-         if(my_value > valueToUpdate ) valueToUpdate = my_value; }, Kokkos ::Max<double>(vmax));
-    Kokkos::fence();
-    parallel_reduce(
-        " Label", mdrange_policy3({ghost, ghost, ghost}, {l_e[0], l_e[1], l_e[2]}),
-        KOKKOS_CLASS_LAMBDA(const int i, const int j, const int k, double &valueToUpdate) {
-         double my_value = wa(i,j,k);
-         if(my_value > valueToUpdate ) valueToUpdate = my_value; }, Kokkos ::Max<double>(wmax));
-    Kokkos::fence();
-    parallel_reduce(
-        " Label", mdrange_policy3({ghost, ghost, ghost}, {l_e[0], l_e[1], l_e[2]}),
-        KOKKOS_CLASS_LAMBDA(const int i, const int j, const int k, double &valueToUpdate) {
-         double my_value = p(i,j,k);
-         if(my_value > valueToUpdate ) valueToUpdate = my_value; }, Kokkos ::Max<double>(pmax));
-    Kokkos::fence();
-    parallel_reduce(
-        " Label", mdrange_policy3({ghost, ghost, ghost}, {l_e[0], l_e[1], l_e[2]}),
-        KOKKOS_CLASS_LAMBDA(const int i, const int j, const int k, double &valueToUpdate) {
-         double my_value = ua(i,j,k);
-         if(my_value < valueToUpdate ) valueToUpdate = my_value; }, Kokkos ::Min<double>(umin));
-    Kokkos::fence();
-    parallel_reduce(
-        " Label", mdrange_policy3({ghost, ghost, ghost}, {l_e[0], l_e[1], l_e[2]}),
-        KOKKOS_CLASS_LAMBDA(const int i, const int j, const int k, double &valueToUpdate) {
-         double my_value = va(i,j,k);
-         if(my_value < valueToUpdate ) valueToUpdate = my_value; }, Kokkos ::Min<double>(vmin));
-    Kokkos::fence();
-    parallel_reduce(
-        " Label", mdrange_policy3({ghost, ghost, ghost}, {l_e[0], l_e[1], l_e[2]}),
-        KOKKOS_CLASS_LAMBDA(const int i, const int j, const int k, double &valueToUpdate) {
-         double my_value = wa(i,j,k);
-         if(my_value < valueToUpdate ) valueToUpdate = my_value; }, Kokkos ::Min<double>(wmin));
-    Kokkos::fence();
-    parallel_reduce(
-        " Label", mdrange_policy3({ghost, ghost, ghost}, {l_e[0], l_e[1], l_e[2]}),
-        KOKKOS_CLASS_LAMBDA(const int i, const int j, const int k, double &valueToUpdate) {
-         double my_value = p(i,j,k);
-         if(my_value < valueToUpdate ) valueToUpdate = my_value; }, Kokkos ::Min<double>(pmin));
-    Kokkos::fence();
     std::string str1 = "output" + std::to_string(n) + ".plt";
     const char *na = str1.c_str();
     std::string str2 = "#!TDV112";
     const char *version = str2.c_str();
     MPI_File_open(MPI_COMM_WORLD, na, MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &fh);
 
-    MPI_Reduce(&umin, &uumin, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&umax, &uumax, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-
-    MPI_Reduce(&vmin, &vvmin, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&vmax, &vvmax, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-
-    MPI_Reduce(&wmin, &wwmin, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&wmax, &wwmax, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-
-    MPI_Reduce(&pmin, &ppmin, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&pmax, &ppmax, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    {
+        double mins[4] = {umin, vmin, wmin, pmin};
+        double maxs[4] = {umax, vmax, wmax, pmax};
+        double gmins[4], gmaxs[4];
+        MPI_Reduce(mins, gmins, 4, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+        MPI_Reduce(maxs, gmaxs, 4, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+        uumin = gmins[0]; vvmin = gmins[1]; wwmin = gmins[2]; ppmin = gmins[3];
+        uumax = gmaxs[0]; vvmax = gmaxs[1]; wwmax = gmaxs[2]; ppmax = gmaxs[3];
+    }
 
     if (comm.me == 0)
     {
