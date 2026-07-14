@@ -1,4 +1,6 @@
 #include "lbm.hpp"
+#include <utility> // std::swap
+#define pi 3.1415926
 
 namespace
 {
@@ -31,39 +33,55 @@ constexpr int LB_OPP[Q27] = {
 void LBM::Initialize()
 {
 
-    f = decltype(f)("f", q, lx, ly, lz);
-    ft = decltype(ft)("ft", q, lx, ly, lz);
-    fb = decltype(fb)("fb", q, lx, ly, lz);
- 
-    ua = decltype(ua)("u", lx, ly, lz);
-    va = decltype(va)("v", lx, ly, lz);
-    wa = decltype(wa)("w", lx, ly, lz);
-    rho = decltype(rho)("rho", lx, ly, lz);
-    p = decltype(p)("p", lx, ly, lz);
- 
-    e = decltype(e)("e", q, dim);
-    t = decltype(t)("t", q);
-    usr = decltype(usr)("usr", lx, ly, lz);
-    ran = decltype(ran)("ran", lx, ly, lz);
-    bb = decltype(bb)("b", q);
+    setup_MPI();
 
+    f = buffer_f("f", q, lx, ly, lz);
+    ft = buffer_f("ft", q, lx, ly, lz);
+    fb = buffer_f("fb", q, lx, ly, lz);
+
+    ua = buffer_u("u", lx, ly, lz);
+    va = buffer_u("v", lx, ly, lz);
+    wa = buffer_u("w", lx, ly, lz); 
+    rho = buffer_u("rho", lx, ly, lz);
+    p = buffer_u("p", lx, ly, lz);
+
+    e = Kokkos::View<int **, Kokkos::CudaSpace>("e", q, dim);
+    t = Kokkos::View<double *, Kokkos::CudaSpace>("t", q);
+    usr = Kokkos::View<int ***, Kokkos::CudaSpace>("usr", lx, ly, lz);
+    ran = Kokkos::View<int ***, Kokkos::CudaSpace>("ran", lx, ly, lz);
+    bb = Kokkos::View<int *, Kokkos::CudaSpace>("b", q);
+
+    auto bb_mirror = Kokkos::create_mirror_view(Kokkos::HostSpace(), bb);
+    auto t_mirror = Kokkos::create_mirror_view(Kokkos::HostSpace(), t);
+    auto e_mirror = Kokkos::create_mirror_view(Kokkos::HostSpace(), e);
     for (int a = 0; a < q; ++a)
     {
-        t(a) = LB_W[a];
-        bb(a) = LB_OPP[a];
+        t_mirror(a) = LB_W[a];
+        bb_mirror(a) = LB_OPP[a];
         for (int d = 0; d < dim; ++d)
-            e(a, d) = LB_E[a][d];
+            e_mirror(a, d) = LB_E[a][d];
     }
-
+    Kokkos::deep_copy(t, t_mirror);
+    Kokkos::deep_copy(e, e_mirror);
+    Kokkos::deep_copy(bb, bb_mirror);
     // macroscopic value initialization
 
-    // macroscopic value initialization
     Kokkos::parallel_for(
-        "initialize", mdrange_policy3({0, 0, 0}, {lx, ly, lz}), KOKKOS_CLASS_LAMBDA(const int i, const int j, const int k) {
-            ua(i, j, k) = 0;
-            va(i, j, k) = 0;
-            wa(i, j, k) = 0;
-            p(i, j, k) = 0;
+        "init_macro", mdrange_policy3({0, 0, 0}, {lx, ly, lz}),
+        KOKKOS_CLASS_LAMBDA(const int i, const int j, const int k) {
+            const double xx = (double)(i - ghost + x_lo) / (double)glx * 2.0 * pi;
+            const double yy = (double)(j - ghost + y_lo) / (double)gly * 2.0 * pi;
+            const double zz = (double)(k - ghost + z_lo) / (double)glz * 2.0 * pi;
+            const double sx = sin(xx), cx = cos(xx);
+            const double sy = sin(yy), cy = cos(yy);
+            const double cz = cos(zz);
+
+            ua(i, j, k) = u0 * sx * cy * cz;
+            va(i, j, k) = -u0 * cx * sy * cz;
+            wa(i, j, k) = 0.0;
+            p(i, j, k) = rho0 * cs2 +
+                         rho0 * u0 * u0 / 16.0 * (cos(2.0 * xx) + cos(2.0 * yy)) *
+                             (cos(2.0 * zz) + 2.0);
             rho(i, j, k) = rho0;
         });
 
@@ -89,11 +107,13 @@ void LBM::Collision()
 {
     // collision
 
+    const double inv_tau = 1.0 / (tau0 + 0.5); 
+
     Kokkos::parallel_for(
-        "collision", mdrange_policy4({0, l_s[0], l_s[1], l_s[2]}, {q, l_e[0], l_e[1], l_e[2]}), KOKKOS_CLASS_LAMBDA(const int ii, const int i, const int j, const int k) {
-            const double u = ua(i, j, k);
-            const double v = va(i, j, k);
-            const double w = wa(i, j, k);
+        "collision",
+        mdrange_policy4({0, l_s[0], l_s[1], l_s[2]}, {q, l_e[0], l_e[1], l_e[2]}),
+        KOKKOS_CLASS_LAMBDA(const int ii, const int i, const int j, const int k) {
+            const double u = ua(i, j, k), v = va(i, j, k), w = wa(i, j, k);
             const double edu = LB_E[ii][0] * u + LB_E[ii][1] * v + LB_E[ii][2] * w;
             const double udu = u * u + v * v + w * w;
 
@@ -106,88 +126,14 @@ void LBM::Collision()
 
 void LBM::Streaming()
 {
-    if (x_lo == 0)
-    {
-        Kokkos::parallel_for(
-            "bcl", mdrange_policy3({0, ghost - 1, ghost - 1}, {q, ly - ghost + 1, lz - ghost + 1}), KOKKOS_CLASS_LAMBDA(const int ii, const int j, const int k) {
-                if (LB_E[ii][0] > 0)
-                {
-                    f(ii, l_s[0] - 1, j, k) =
-                        f(LB_OPP[ii], l_s[0] + 1, j + 2 * LB_E[ii][1], k + 2 * LB_E[ii][2]);
-                }
-            });
-    }
+    passf(f);
 
-    if (x_hi == glx - 1)
-    {
-        Kokkos::parallel_for(
-            "bcr", mdrange_policy3({0, ghost - 1, ghost - 1}, {q, ly - ghost + 1, lz - ghost + 1}), KOKKOS_CLASS_LAMBDA(const int ii, const int j, const int k) {
-                {
-                    f(ii, l_e[0], j, k) =
-                        f(LB_OPP[ii], l_e[0] - 2, j + 2 * LB_E[ii][1], k + 2 * LB_E[ii][2]);
-                }
-            });
-    }
-    // front boundary bounce back
-    if (y_lo == 0)
-    {
-        Kokkos::parallel_for(
-            "bcf", mdrange_policy3({0, ghost - 1, ghost - 1}, {q, lx - ghost + 1, lz - ghost + 1}), KOKKOS_CLASS_LAMBDA(const int ii, const int i, const int k) {
-                if (LB_E[ii][1] > 0)
-                {
-                    f(ii, i, l_s[1] - 1, k) =
-                        f(LB_OPP[ii], i + 2 * LB_E[ii][0], l_s[1] + 1, k + 2 * LB_E[ii][2]);
-                }
-            });
-    }
-    // back boundary bounce back
-    Kokkos::fence();
-    if (y_hi == gly - 1)
-    {
-        Kokkos::parallel_for(
-            "bcb", mdrange_policy3({0, ghost - 1, ghost - 1}, {q, lx - ghost + 1, lz - ghost + 1}), KOKKOS_CLASS_LAMBDA(const int ii, const int i, const int k) {
-                if (LB_E[ii][1] < 0)
-                {
-                    f(ii, i, l_e[1], k) =
-                        f(LB_OPP[ii], i + 2 * LB_E[ii][0], l_e[1] - 2, k + 2 * LB_E[ii][2]);
-                }
-            });
-    }
-    // bottom boundary bounce back
-    Kokkos::fence();
-    if (z_lo == 0)
-    {
-        Kokkos::parallel_for(
-            "bcd", mdrange_policy3({0, ghost - 1, ghost - 1}, {q, lx - ghost + 1, ly - ghost + 1}), KOKKOS_CLASS_LAMBDA(const int ii, const int i, const int j) {
-                if (LB_E[ii][2] > 0)
-                {
-                    f(ii, i, j, l_s[2] - 1) =
-                        f(LB_OPP[ii], i + 2 * LB_E[ii][0], j + 2 * LB_E[ii][1], l_s[2] + 1);
-                }
-            });
-    }
-    // top boundary bounce back
-    Kokkos::fence();
-    if (z_hi == glz - 1)
-    {
-        Kokkos::parallel_for(
-            "bcu", mdrange_policy3({0, ghost - 1, ghost - 1}, {q, lx - ghost + 1, ly - ghost + 1}), KOKKOS_CLASS_LAMBDA(const int ii, const int i, const int j) {
-                if (LB_E[ii][2] < 0)
-                {
-                    f(ii, i, j, l_e[2]) =
-                        f(LB_OPP[ii], i + 2 * LB_E[ii][0], j + 2 * LB_E[ii][1], l_e[2] - 2);
-                }
-            });
-    }
-
-    // streaming process
     Kokkos::parallel_for(
         "stream1",
         mdrange_policy4({0, ghost, ghost, ghost}, {q, lx - ghost, ly - ghost, lz - ghost}),
         KOKKOS_CLASS_LAMBDA(const int ii, const int i, const int j, const int k) {
             ft(ii, i, j, k) = f(ii, i - LB_E[ii][0], j - LB_E[ii][1], k - LB_E[ii][2]);
         });
-
     Kokkos::fence();
     std::swap(f, ft);
 };
@@ -216,17 +162,6 @@ void LBM::Update()
             wa(i, j, k) = wl;
         });
 
-    
-    if (z_hi == glz - 1)
-    {
-        const int kk = l_e[2] - 1;
-        Kokkos::parallel_for(
-            "lid_bc",
-            Kokkos::MDRangePolicy<Kokkos::Rank<2>>({ghost, ghost}, {lx - ghost, ly - ghost}),
-            KOKKOS_CLASS_LAMBDA(const int i, const int j) {
-                ua(i, j, kk) = 0.1;
-            });
-    }
     Kokkos::fence();
 };
 
