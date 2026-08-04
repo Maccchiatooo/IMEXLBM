@@ -1,76 +1,59 @@
-# IMEXLBM: GPU-Accelerated Lattice Boltzmann Solver
+# IMEXLBM — D3Q27 lattice Boltzmann, Kokkos + MPI
 
-**IMEXLBM** is a high-performance, single-phase **Lattice Boltzmann Method (LBM)** solver engineered for next-generation GPU-accelerated architectures. By leveraging the **Kokkos** performance portability library, IMEXLBM achieves massive throughput on diverse hardware while maintaining a single codebase.
+One portable source set, three machine-specific build trees.
 
----
+```
+.                       canonical sources (edit here)
+├── Polaris/            ALCF  — 4x A100,        CUDA
+├── Frontier/           OLCF  — 4x MI250X,      HIP
+└── Aurora/             ALCF  — 6x PVC Max 1550, SYCL
+```
 
-## 🚀 Performance & Scalability
+Each folder is **self-contained** — sources, build files, job script, and a
+README with the machine's specifics and caveats. Start with the README in the
+folder for your machine.
 
-* **GPU Acceleration:** Highly optimized kernels provide significant speedups over traditional CPU-only implementations.
-* **Performance Portability:** Built on **Kokkos**, ensuring high performance across different GPU vendors (NVIDIA, AMD, Intel) and multicore CPUs.
-* **Massive Parallelism:** Fully integrated with the **Message Passing Interface (MPI)** for seamless multi-node scaling on leadership-class supercomputing platforms.
+## The sources are shared and identical
 
+`main.cpp`, `lbm.cpp`, `lbm.hpp`, `mpi_view_transfer.cpp`, `System.cpp`,
+`System.hpp` are byte-identical in all four locations. The backend is chosen
+entirely by **which Kokkos you link**, not by editing code:
 
+```cpp
+using DeviceSpace = Kokkos::DefaultExecutionSpace::memory_space;
+```
 
-## ✅ Accuracy & Validation
+That resolves to `CudaSpace` / `HIPSpace` / `SYCLDeviceUSMSpace` per machine.
 
-Precision is a core priority of IMEXLBM. Our solver is rigorously validated against canonical 2D and 3D benchmark problems. 
-
-The results between GPU-accelerated and CPU-only platforms are **highly consistent**, with discrepancies limited strictly to floating-point round-off errors, ensuring that performance gains do not come at the cost of physical accuracy.
-
-## 🛠️ Key Features
-
-* **Single-Phase Flow:** High-fidelity LBM solver for incompressible fluid dynamics.
-* **HPC Ready:** Designed for large-scale deployments on distributed supercomputers.
-* **Cross-Platform:** Write once, run anywhere with Kokkos.
-
----
-# IMEXLBM
-
-> **GPU-Accelerated Lattice Boltzmann Solver with Kokkos Performance Portability**
-
-**IMEXLBM** is a high-performance, single-phase **Lattice Boltzmann Method (LBM)** solver engineered for next-generation GPU-accelerated architectures. By leveraging the **Kokkos** performance portability library, IMEXLBM achieves massive throughput on diverse hardware while maintaining a single codebase.
-
----
-
-## 🚀 Key Features
-
-* **GPU Acceleration:** Significant speedup over traditional CPU-only implementations.
-* **Performance Portability:** Powered by **Kokkos**, ensuring high performance across NVIDIA, AMD, Intel GPUs, and multicore CPUs.
-* **HPC Scaling:** Fully integrated with **MPI** for multi-node scaling on leadership-class supercomputers.
-* **Validated Accuracy:** Rigorous validation against canonical 2D and 3D benchmarks. Results are consistent with CPU-only calculations down to the floating-point round-off level.
-
----
-## 📚 Citation
-
-If you use **IMEXLBM** in your research, please cite the following publications:
-
-### Key Publications
-> [1] **Zhao, C., Patel, S., Balakrishnan, R. and Lee, T., 2025.** IMEXLBM: A portable lattice-Boltzmann solver for heterogeneous platforms. In *Fluids Engineering Division Summer Meeting* (Vol. 88995, p. V001T03A016). American Society of Mechanical Engineers.
-
-## 🛠️ Installation
-
-### Prerequisites
-Before compiling IMEXLBM, ensure you have the following installed:
-1.  **MPI:** (e.g., OpenMPI or MPICH) for distributed memory parallelism.
-2.  **Kokkos:** Follow the [official Kokkos guide](https://kokkos.github.io/kokkos-core-wiki/post-install/index.html) to set up the library for your specific hardware backend.
-
----
-
-## 📂 Project Structure: Lid-Driven Cavity Example
-
-The repository includes a C++ implementation of the **Lid-Driven Cavity** problem, organized into three core modules:
-
-1.  **Main Function:** Orchestrates the program structure and the simulation time-loop.
-2.  **System:** Defines macroscopic parameters and relaxation time ($\tau$), managing the mapping between physical and simulation units.
-3.  **LBM Solver:** The core engine implementing the 2D LBM streaming and collision kernels.
-
----
-
-## 🏗️ Compilation Instructions
-
-### 1. Standard C++ (CPU Debugging)
-To run a basic version of the solver on a local CPU without Kokkos dependencies:
+Because they are copies rather than symlinks, edits must be mirrored. To check:
 
 ```bash
-g++ ./System.cpp ./lbm.cpp ./main.cpp -o lbm_serial
+for f in *.cpp *.hpp; do
+  for d in Polaris Frontier Aurora; do diff -q "$f" "$d/$f"; done
+done
+```
+
+## At a glance
+
+| | Polaris | Frontier | Aurora |
+|---|---|---|---|
+| GPU | 4x A100 `cc80` | 4x MI250X = **8 GCDs** `gfx90a` | 6x PVC = **12 tiles** |
+| Ranks/node | 4 | 8 | 12 |
+| Backend | CUDA | HIP | SYCL (AOT) |
+| Compiler | `CC` (nvc++) | `CC` (amdclang++) | `mpic++ -cxx=icpx` |
+| Kokkos | module, `KOKKOS_HOME` | **build it yourself** | module, `KOKKOS_ROOT` |
+| Scheduler | PBS (`qsub`) | Slurm (`sbatch`) | PBS (`qsub`) |
+| Local rank | `$PMI_LOCAL_RANK` | `$SLURM_LOCALID` | `$PALS_LOCAL_RANKID` |
+| GPU pinning | `CUDA_VISIBLE_DEVICES` | `ROCR_VISIBLE_DEVICES` | `ZE_AFFINITY_MASK` |
+| GPU-aware MPI | `MPICH_GPU_SUPPORT_ENABLED=1` | `MPICH_GPU_SUPPORT_ENABLED=1` | `MPIR_CVAR_ENABLE_GPU=1` |
+
+All three require GPU-aware MPI — `exchange_f()` passes device pointers straight
+into `MPI_Isend`/`MPI_Irecv`. Without it, the first exchange faults.
+
+## Status
+
+* **Polaris** — the original working build. Unchanged apart from the two
+  portability edits, which are no-ops on CUDA.
+* **Frontier**, **Aurora** — ported without access to either machine. Neither
+  has been compiled or run. Each README lists what to verify first; in both
+  cases that starts with register/private-memory spilling in `Collision`.
