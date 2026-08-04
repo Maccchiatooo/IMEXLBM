@@ -1,8 +1,5 @@
 # IMEXLBM — Aurora (ALCF) port
 
-Self-contained build tree for Aurora. Ported from the Polaris (ALCF) version in
-the parent directory; a Frontier (OLCF) port lives in `../Frontier/`.
-
 ## Quick start
 
 ```bash
