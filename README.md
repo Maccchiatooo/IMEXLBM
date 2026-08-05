@@ -50,3 +50,12 @@ done
 All three require GPU-aware MPI — `exchange_f()` passes device pointers straight
 into `MPI_Isend`/`MPI_Irecv`. Without it, the first exchange faults.
 
+
+---
+## 📚 Citation
+
+If you use **IMEXLBM** in your research, please cite the following publications:
+
+### Key Publications
+> [1] **Zhao, C., Patel, S., Balakrishnan, R. and Lee, T., 2025.** IMEXLBM: A portable lattice-Boltzmann solver for heterogeneous platforms. In *Fluids Engineering Division Summer Meeting* (Vol. 88995, p. V001T03A016). American Society of Mechanical Engineers.
+
