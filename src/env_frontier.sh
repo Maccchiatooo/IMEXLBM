@@ -24,6 +24,18 @@ module reset
 module load PrgEnv-amd
 module load rocm
 
+# PIN cray-mpich. Frontier's default is 8.1.31, which has an intra-node
+# GPU-aware regression measured by the ImExLBM2 group (A. Gardner, Aug 2026) at
+# ~45x on halo exchange. exchange_f() hands HIPSpace pointers straight to MPI,
+# so the default module cripples precisely the phase a scaling study measures --
+# the same class of trap as the Polaris self-message stall, and just as invisible
+# without an explicit check.
+# MPICH_VERSION_DISPLAY makes every run print its MPI version so it is never
+# assumed. If 9.0.1 is retired, load the newest available and re-measure rather
+# than silently falling back to the default.
+module load cray-mpich/9.0.1
+export MPICH_VERSION_DISPLAY=1
+
 # The Cray PE only exists on Frontier LOGIN nodes. OLCF also has home*/dtn*
 # hosts for file management, and ssh can land you there -- on those, all three
 # module loads below fail and every path check downstream reports a confusing
@@ -53,7 +65,19 @@ export ROCM_PATH=${ROCM_PATH:?ROCM_PATH unset - did 'module load rocm' fail?}
 # or you get undefined hip symbols at link time / device-code mismatches.
 # Makefile.frontier uses $(KOKKOS_HOME) for both -I include and -L lib, so the
 # variable must be named KOKKOS_HOME (not KOKKOS_ROOT).
-export KOKKOS_HOME=${KOKKOS_HOME:-$HOME/opt/kokkos-4.6.02-hip-gfx90a}
+# 4.7.02: ImExLBM2 measured +2.5% over 4.6.02, entirely in Streaming.
+# Default to scratch, not $HOME -- /ccs/home is read-only on compute nodes.
+# MEMBERWORK is set per-project, so this stays project-agnostic.
+# Find a writable Lustre scratch. $MEMBERWORK is unreliable here -- observed
+# set to /lustre/orion/scratch/$USER (no project component) and NOT writable,
+# so trust the filesystem over the variable and fall back to $HOME only as a
+# last resort (jobs cannot write there, but it at least lets you compile).
+_scratch=""
+for _c in "$MEMBERWORK" /lustre/orion/*/scratch/"$USER"; do
+    [ -n "$_c" ] && [ -d "$_c" ] && [ -w "$_c" ] && { _scratch="$_c"; break; }
+done
+export KOKKOS_HOME=${KOKKOS_HOME:-${_scratch:-$HOME}/opt/kokkos-4.7.02-hip-gfx90a}
+unset _scratch _c
 if [ -d "$KOKKOS_HOME/lib64" ]; then
     export KOKKOS_LIB=$KOKKOS_HOME/lib64
 else
@@ -63,6 +87,8 @@ export KOKKOS_INC=$KOKKOS_HOME/include
 
 # ---- 4. PATH / LD_LIBRARY_PATH ----------------------------------------------
 export PATH=$ROCM_PATH/bin:$PATH
+# MPICH_DIR/gtl must be resolvable at RUNTIME, not just link time.
+export LD_LIBRARY_PATH=${MPICH_DIR:-}/lib:${CRAY_MPICH_ROOTDIR:-}/gtl/lib:$LD_LIBRARY_PATH
 export LD_LIBRARY_PATH=$KOKKOS_LIB:$ROCM_PATH/lib:$LD_LIBRARY_PATH
 
 # ---- 5. Runtime / build knobs -----------------------------------------------
@@ -112,7 +138,22 @@ if [ -e "$KOKKOS_INC/KokkosCore_config.h" ]; then
     fi
 fi
 if command -v CC >/dev/null 2>&1; then
-    echo "  [ok]   CC         = $(command -v CC)  ($(CC --version 2>/dev/null | head -1))"
+    _ccver=$(CC --version 2>/dev/null | head -1)
+    # Makefile.frontier passes -x hip --offload-arch=gfx90a, which CCE does not
+    # handle -- it crashes the clang frontend with a stack trace rather than
+    # emitting a usable error. A fresh login node defaults to PrgEnv-cray, so
+    # this is easy to hit whenever you reconnect and forget to source this file.
+    case "$_ccver" in
+        *"AMD clang"*)
+            echo "  [ok]   CC         = $(command -v CC)  ($_ccver)" ;;
+        *)
+            echo "  [FAIL] CC is not amdclang++ -- PrgEnv-amd is not active."
+            echo "         got: $_ccver"
+            echo "         Makefile.frontier's -x hip flags will crash this compiler."
+            echo "         Re-source this file; it does 'module load PrgEnv-amd'."
+            _ok=0 ;;
+    esac
+    unset _ccver
 else
     echo "  [FAIL] CC not found in PATH"; _ok=0
 fi

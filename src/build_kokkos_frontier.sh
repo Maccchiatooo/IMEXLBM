@@ -17,15 +17,21 @@
 # =============================================================================
 set -euo pipefail
 
-KOKKOS_VERSION=${KOKKOS_VERSION:-4.6.02}
-KOKKOS_PREFIX=${KOKKOS_PREFIX:-$HOME/opt/kokkos-${KOKKOS_VERSION}-hip-gfx90a}
-BUILD_ROOT=${BUILD_ROOT:-$HOME/src}
+KOKKOS_VERSION=${KOKKOS_VERSION:-4.7.02}
+# Same scratch probe as env_frontier.sh -- trust the filesystem, not $MEMBERWORK.
+_scratch=""
+for _c in "$MEMBERWORK" /lustre/orion/*/scratch/"$USER"; do
+    [ -n "$_c" ] && [ -d "$_c" ] && [ -w "$_c" ] && { _scratch="$_c"; break; }
+done
+KOKKOS_PREFIX=${KOKKOS_PREFIX:-${_scratch:-$HOME}/opt/kokkos-${KOKKOS_VERSION}-hip-gfx90a}
+BUILD_ROOT=${BUILD_ROOT:-${_scratch:-$HOME}/src}
 
 # ---- modules (must match what env_frontier.sh loads at build/run time) -------
 module reset
 module load PrgEnv-amd
 module load rocm
 module load craype-accel-amd-gfx90a
+module load cray-mpich/9.0.1   # same MPI the code runs against
 module load cmake
 
 echo "==> ROCM_PATH = ${ROCM_PATH:-<unset>}"
