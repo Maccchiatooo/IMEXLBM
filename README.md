@@ -1,4 +1,4 @@
-# IMEXLBM — D3Q27 lattice Boltzmann, Kokkos + MPI
+# IMEXLBM: A Portable Lattice-Boltzmann Solver for Heterogeneous Platforms
 
 One portable source set, three machine-specific build trees.
 
@@ -50,10 +50,3 @@ done
 All three require GPU-aware MPI — `exchange_f()` passes device pointers straight
 into `MPI_Isend`/`MPI_Irecv`. Without it, the first exchange faults.
 
-## Status
-
-* **Polaris** — the original working build. Unchanged apart from the two
-  portability edits, which are no-ops on CUDA.
-* **Frontier**, **Aurora** — ported without access to either machine. Neither
-  has been compiled or run. Each README lists what to verify first; in both
-  cases that starts with register/private-memory spilling in `Collision`.
