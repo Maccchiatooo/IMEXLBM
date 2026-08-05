@@ -50,8 +50,6 @@ done
 All three require GPU-aware MPI — `exchange_f()` passes device pointers straight
 into `MPI_Isend`/`MPI_Irecv`. Without it, the first exchange faults.
 
-
----
 ## 📚 Citation
 
 If you use **IMEXLBM** in your research, please cite the following publications:
