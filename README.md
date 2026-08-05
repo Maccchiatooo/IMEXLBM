@@ -1,5 +1,7 @@
 # IMEXLBM: A Portable Lattice-Boltzmann Solver for Heterogeneous Platforms
 
+**IMEXLBM** is a high-performance, single-phase **Lattice Boltzmann Method (LBM)** solver engineered for next-generation GPU-accelerated architectures. By leveraging the **Kokkos** performance portability library, IMEXLBM achieves massive throughput on diverse hardware while maintaining a single codebase.
+
 One portable source set, three machine-specific build trees.
 
 ```
