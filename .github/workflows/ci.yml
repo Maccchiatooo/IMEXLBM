@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel an in-progress run when the same ref gets a new push: the older run's
+# verdict is already obsolete, and runners are a shared resource.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-smoke:
+    name: Kokkos Serial + Open MPI
+    runs-on: ubuntu-latest
+
+    env:
+      # Pinned, not "latest". An unpinned dependency turns an unrelated upstream
+      # release into a red CI on a PR that changed nothing -- and you find out
+      # while debugging something else.
+      KOKKOS_VERSION: "5.1.1"
+      KOKKOS_PREFIX: /tmp/kokkos-install
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Install Open MPI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libopenmpi-dev openmpi-bin
+
+      # There is no Kokkos apt package, so it is built from source. This is the
+      # slow step (~5 min); the cache added in a later PR removes it.
+      - name: Build and install Kokkos ${{ env.KOKKOS_VERSION }}
+        run: |
+          curl -fsSL "https://github.com/kokkos/kokkos/archive/refs/tags/${KOKKOS_VERSION}.tar.gz" | tar xz
+          cmake -S "kokkos-${KOKKOS_VERSION}" -B kokkos-build \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_INSTALL_PREFIX="${KOKKOS_PREFIX}" \
+                -DKokkos_ENABLE_SERIAL=ON
+          cmake --build kokkos-build -j"$(nproc)"
+          cmake --install kokkos-build
+
+      - name: Configure
+        run: |
+          cmake -S . -B build \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DKokkos_ROOT="${KOKKOS_PREFIX}"
+
+      - name: Build
+        run: cmake --build build -j"$(nproc)"
+
+      # Exercises MPI decomposition, halo exchange and 20 full time steps.
+      # A crash, an abort or a non-zero exit fails the job. It does NOT check
+      # that the answer is right -- that is what the regression test adds next.
+      - name: Smoke test (32^3, 2 ranks)
+        working-directory: build
+        run: |
+          printf '1.0  0.1  1600\n0.05  20  1\n32  32  32\n' > input.in
+          mpirun -n 2 --oversubscribe ./imexlbm
