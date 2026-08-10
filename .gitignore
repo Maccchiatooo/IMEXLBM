@@ -1,0 +1,36 @@
+# ---- build products -------------------------------------------------------
+# Objects and executables are built inside machines/<name>/, beside the
+# Makefile, because SRCDIR/VPATH point back at ../../src.
+*.o
+LBM3D_aurora*
+LBM3D_polaris*
+LBM3D_frontier*
+machines/polaris/mpi_gpu_bw
+
+# ---- per-machine working copy of the input deck ---------------------------
+# input.in at the repo root is the tracked example. Each machine directory
+# gets a working copy you are expected to edit; those stay untracked.
+machines/*/input.in
+
+# ---- scheduler output -----------------------------------------------------
+# PBS (Polaris, Aurora): <jobname>.o<jobid> and .e<jobid>
+*.o[0-9]*
+*.e[0-9]*
+# Slurm (Frontier): #SBATCH -o %x-%j.out / -e %x-%j.err
+*.out
+*.err
+
+# ---- run output -----------------------------------------------------------
+# LBM::MPIoutput writes output<n>.plt (Tecplot, via MPI-IO)
+# LBM::Output    writes output<n><rank>.dat
+output*.plt
+output*.dat
+# submit_strong_scaling.sh runs each sweep in scaling_<jobid>/
+scaling_*/
+
+# ---- editors / OS ---------------------------------------------------------
+.DS_Store
+*~
+*.swp
+.vscode/
+.idea/
