@@ -12,9 +12,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-smoke:
-    name: Kokkos Serial + Open MPI
+  build-and-test:
+    name: ${{ matrix.compiler }} / Kokkos ${{ matrix.backend }}
     runs-on: ubuntu-latest
+
+    strategy:
+      # Report every broken combination in one run. Under the default
+      # fail-fast, the first red job cancels the others, so you fix one thing
+      # per push and discover the next failure only after the previous fix has
+      # already landed.
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+        backend: [SERIAL, OPENMP]
 
     env:
       # Pinned, not "latest". An unpinned dependency turns an unrelated upstream
@@ -27,20 +37,47 @@ jobs:
       - name: Check out the repository
         uses: actions/checkout@v7
 
+      # CMake honours CC/CXX, and so does the Kokkos build below, so the whole
+      # toolchain switch is these two variables.
+      - name: Select the compiler
+        run: |
+          if [ "${{ matrix.compiler }}" = "clang" ]; then
+            echo "CC=clang"    >> "$GITHUB_ENV"
+            echo "CXX=clang++" >> "$GITHUB_ENV"
+          else
+            echo "CC=gcc" >> "$GITHUB_ENV"
+            echo "CXX=g++" >> "$GITHUB_ENV"
+          fi
+
+      # libomp-dev is what Clang needs for -fopenmp; g++ ships its own runtime.
       - name: Install Open MPI
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libopenmpi-dev openmpi-bin
+          sudo apt-get install -y --no-install-recommends \
+               libopenmpi-dev openmpi-bin libomp-dev
 
-      # There is no Kokkos apt package, so it is built from source. This is the
-      # slow step (~5 min); the cache added in a later PR removes it.
+      # The key must name everything that changes the installed artifact: the
+      # Kokkos version, the compiler that built it, the backend it was
+      # configured with, and the runner image. Leave one out and a later job
+      # silently restores an incompatible install -- a green CI that tested
+      # something other than what you asked for. That is worse than a red one,
+      # because nobody investigates green.
+      - name: Restore cached Kokkos
+        id: kokkos-cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.KOKKOS_PREFIX }}
+          key: kokkos-${{ env.KOKKOS_VERSION }}-${{ matrix.compiler }}-${{ matrix.backend }}-${{ runner.os }}-${{ runner.arch }}
+
       - name: Build and install Kokkos ${{ env.KOKKOS_VERSION }}
+        if: steps.kokkos-cache.outputs.cache-hit != 'true'
         run: |
           curl -fsSL "https://github.com/kokkos/kokkos/archive/refs/tags/${KOKKOS_VERSION}.tar.gz" | tar xz
           cmake -S "kokkos-${KOKKOS_VERSION}" -B kokkos-build \
                 -DCMAKE_BUILD_TYPE=Release \
                 -DCMAKE_INSTALL_PREFIX="${KOKKOS_PREFIX}" \
-                -DKokkos_ENABLE_SERIAL=ON
+                -DKokkos_ENABLE_SERIAL=ON \
+                -DKokkos_ENABLE_OPENMP=${{ matrix.backend == 'OPENMP' && 'ON' || 'OFF' }}
           cmake --build kokkos-build -j"$(nproc)"
           cmake --install kokkos-build
 
