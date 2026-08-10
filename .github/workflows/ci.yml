@@ -53,11 +53,10 @@ jobs:
       - name: Build
         run: cmake --build build -j"$(nproc)"
 
-      # Exercises MPI decomposition, halo exchange and 20 full time steps.
-      # A crash, an abort or a non-zero exit fails the job. It does NOT check
-      # that the answer is right -- that is what the regression test adds next.
-      - name: Smoke test (32^3, 2 ranks)
-        working-directory: build
-        run: |
-          printf '1.0  0.1  1600\n0.05  20  1\n32  32  32\n' > input.in
-          mpirun -n 2 --oversubscribe ./imexlbm
+      # Runs a 32^3 Taylor-Green case on 1, 2 and 4 ranks and asserts the two
+      # exact invariants of the discrete dynamics (mass, momentum) plus
+      # agreement between rank counts. Subsumes a smoke test: a crash, an abort
+      # or a non-zero exit fails it too. See the header of the script for what
+      # each check is for and why kinetic-energy monotonicity is NOT asserted.
+      - name: Regression test
+        run: ./tests/regression.sh build/imexlbm
