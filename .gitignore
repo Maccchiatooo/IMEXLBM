@@ -6,6 +6,8 @@ LBM3D_aurora*
 LBM3D_polaris*
 LBM3D_frontier*
 machines/polaris/mpi_gpu_bw
+build/
+build-*/
 
 # ---- per-machine working copy of the input deck ---------------------------
 # input.in at the repo root is the tracked example. Each machine directory

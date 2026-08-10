@@ -88,10 +88,20 @@ using mdrange_policy3_lb = Kokkos::MDRangePolicy<Kokkos::Rank<3, Kokkos::Iterate
 // The static_assert guards against accidentally linking a Serial/OpenMP-only
 // Kokkos, which would silently put every buffer in HostSpace and hand host
 // pointers to the GPU-aware MPI calls in exchange_f().
+//
+// The machine Makefiles leave it armed, so a forgotten `module load` fails the
+// build instead of producing a binary that runs but is two orders of magnitude
+// slower than it should be. The CMake build (CPU-only, for local development
+// and CI) defines LBM_ALLOW_HOST_BUILD to disarm it: a host build is correct --
+// host pointers into a plain MPI is a valid path -- it is just never what you
+// want on a GPU machine.
 using DeviceSpace = Kokkos::DefaultExecutionSpace::memory_space;
+#ifndef LBM_ALLOW_HOST_BUILD
 static_assert(!std::is_same<DeviceSpace, Kokkos::HostSpace>::value,
               "Kokkos must be built with a GPU backend (CUDA on Polaris, HIP on "
-              "Frontier); a host-only build breaks the GPU-aware MPI path.");
+              "Frontier, SYCL on Aurora); a host-only build breaks the GPU-aware "
+              "MPI path. Define LBM_ALLOW_HOST_BUILD to build for CPU anyway.");
+#endif
 
 // lbm.hpp — View 别名加 LayoutRight(最右维 k 变 stride-1)
 using buffer_f      = Kokkos::View<double ****, Kokkos::LayoutRight, DeviceSpace>;
