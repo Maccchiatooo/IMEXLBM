@@ -1,0 +1,73 @@
+# Frontier build — Kokkos HIP backend (AMD MI250X, gfx90a)
+#
+#   source env_frontier.sh          # modules + KOKKOS_HOME + runtime knobs
+#   make -f Makefile.frontier
+#
+# The Cray `CC` wrapper in PrgEnv-amd is amdclang++ + cray-mpich includes/libs.
+# With craype-accel-amd-gfx90a loaded it also links the GTL (mpi_gtl_hsa), which
+# is REQUIRED here: exchange_f() passes HIPSpace device pointers straight into
+# MPI_Isend/Irecv. Without GTL, MPI dereferences the device pointer as host
+# memory and segfaults on the first exchange.
+
+# SCALING=1 compiles out main.cpp's per-step collision timing (a fence pair +
+# printf every step), which would otherwise dominate the measurement once the
+# per-rank subdomain gets small. PROFILE=1 builds the per-phase profiler
+# (profile.hpp/cpp) and adds two fences to make phases attributable, so it is
+# NOT a throughput build. Separate TAG => separate objects and exe, so all
+# three can coexist.
+#   make -f Makefile.frontier            -> LBM3D_frontier
+#   make -f Makefile.frontier SCALING=1  -> LBM3D_frontier_scaling
+#   make -f Makefile.frontier PROFILE=1  -> LBM3D_frontier_profile
+ifdef SCALING
+TAG            = _scaling
+EXTRA_CPPFLAGS = -DLBM_NO_PERSTEP_TIMING
+endif
+ifdef PROFILE
+TAG            = _profile
+EXTRA_CPPFLAGS = -DLBM_PROFILE -DLBM_NO_PERSTEP_TIMING
+endif
+
+EXE_NAME = LBM3D_frontier$(TAG)
+SRC      = $(wildcard *.cpp)
+OBJS     = $(SRC:.cpp=.frontier$(TAG).o)
+
+CXX = CC
+
+# --offload-arch=gfx90a  : MI250X target (replaces Polaris' -gpu=cc80)
+# -x hip                 : the .cpp files contain HIP device code via Kokkos
+# -munsafe-fp-atomics    : lets Kokkos use hardware fp atomics on MI250X
+CPPFLAGS = \
+    -O3 -std=c++17 \
+    -x hip --offload-arch=gfx90a \
+    -munsafe-fp-atomics \
+    -fopenmp \
+    -I$(KOKKOS_HOME)/include \
+    $(EXTRA_CPPFLAGS) \
+    $(USER_CPPFLAGS)
+
+LDFLAGS = --offload-arch=gfx90a -fopenmp
+
+# $(ROCM_PATH)/lib -lamdhip64 is the HIP runtime. The Cray wrapper adds
+# cray-mpich and (with craype-accel-amd-gfx90a) the GTL automatically; the
+# explicit GTL line below is a no-op belt-and-braces for wrapper-less builds.
+LDLIBS = \
+    -L$(KOKKOS_HOME)/lib64 -L$(KOKKOS_HOME)/lib \
+    -lkokkoscore \
+    -lkokkossimd \
+    -L$(ROCM_PATH)/lib -lamdhip64 \
+    $(PE_MPICH_GTL_DIR_amd_gfx90a) $(PE_MPICH_GTL_LIBS_amd_gfx90a) \
+    -lpthread
+
+default: $(EXE_NAME)
+	@echo "Build complete: $(EXE_NAME)"
+
+$(EXE_NAME): $(OBJS)
+	$(CXX) $(LDFLAGS) -o $(EXE_NAME) $(OBJS) $(LDLIBS)
+
+%.frontier$(TAG).o: %.cpp
+	$(CXX) $(CPPFLAGS) -c $< -o $@
+
+clean:
+	rm -f $(OBJS) $(EXE_NAME)
+
+.PHONY: default clean
