@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.23)
-project(IMEXLBM VERSION 1.0.0 LANGUAGES CXX
+project(IMEXLBM VERSION 1.0.2 LANGUAGES CXX
         DESCRIPTION "A portable lattice-Boltzmann solver for heterogeneous platforms")
 
 # ---------------------------------------------------------------------------
