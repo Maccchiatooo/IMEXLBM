@@ -28,7 +28,9 @@ EXTRA_CPPFLAGS = -DLBM_PROFILE -DLBM_NO_PERSTEP_TIMING
 endif
 
 EXE_NAME = LBM3D_frontier$(TAG)
-SRC      = $(wildcard *.cpp)
+SRCDIR   = ../../src
+VPATH    = $(SRCDIR)
+SRC      = $(notdir $(wildcard $(SRCDIR)/*.cpp))
 OBJS     = $(SRC:.cpp=.frontier$(TAG).o)
 
 CXX = CC
@@ -41,7 +43,7 @@ CPPFLAGS = \
     -x hip --offload-arch=gfx90a \
     -munsafe-fp-atomics \
     -fopenmp \
-    -I$(KOKKOS_HOME)/include \
+    -I$(KOKKOS_HOME)/include -I$(SRCDIR) \
     $(EXTRA_CPPFLAGS) \
     $(USER_CPPFLAGS)
 
