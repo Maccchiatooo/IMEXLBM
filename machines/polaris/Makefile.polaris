@@ -30,9 +30,12 @@ EXTRA_CPPFLAGS = -DLBM_PROFILE -DLBM_NO_PERSTEP_TIMING
 endif
 
 EXE_NAME = LBM3D_polaris$(TAG)
-# mpi_gpu_bw.cpp is a standalone MPI probe with its own main(); keep it out of
-# the solver's object list.
-SRC      = $(filter-out mpi_gpu_bw.cpp,$(wildcard *.cpp))
+# Sources live in ../../src. mpi_gpu_bw.cpp is a standalone MPI probe with its
+# own main(); it sits beside this Makefile rather than in src/, so the wildcard
+# below never sees it and no filter-out is needed.
+SRCDIR   = ../../src
+VPATH    = $(SRCDIR)
+SRC      = $(notdir $(wildcard $(SRCDIR)/*.cpp))
 OBJS     = $(SRC:.cpp=.polaris$(TAG).o)
 
 # Cray MPI wrapper over nvc++ (PrgEnv-nvidia); -cuda enables CUDA compilation
@@ -41,7 +44,7 @@ CXX = CC
 CPPFLAGS = \
     -O3 -std=c++17 \
     -cuda -gpu=cc80,nordc -fopenmp \
-    -I$(KOKKOS_HOME)/include \
+    -I$(KOKKOS_HOME)/include -I$(SRCDIR) \
     $(EXTRA_CPPFLAGS) \
     $(USER_CPPFLAGS)
 

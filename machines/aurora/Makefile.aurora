@@ -40,7 +40,9 @@ EXTRA_CPPFLAGS = -DLBM_PROFILE -DLBM_NO_PERSTEP_TIMING
 endif
 
 EXE_NAME = LBM3D_aurora$(TAG)
-SRC      = $(wildcard *.cpp)
+SRCDIR   = ../../src
+VPATH    = $(SRCDIR)
+SRC      = $(notdir $(wildcard $(SRCDIR)/*.cpp))
 OBJS     = $(SRC:.cpp=.aurora$(TAG).o)
 
 # Aurora MPICH wrapper over icpx. -cxx=icpx is required: the bare wrapper does
@@ -68,7 +70,7 @@ CPPFLAGS = \
     -fiopenmp \
     -ffp-model=precise \
     $(SYCL_AOT_CPPFLAGS) \
-    -I$(KOKKOS_ROOT)/include \
+    -I$(KOKKOS_ROOT)/include -I$(SRCDIR) \
     -Wno-deprecated-declarations \
     -Wno-tautological-constant-compare \
     -Wno-unknown-attributes \
