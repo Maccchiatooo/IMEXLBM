@@ -1,0 +1,55 @@
+cff-version: 1.2.0
+message: "If you use IMEXLBM in your research, please cite the conference paper below. To cite a specific version of the code, use its Zenodo DOI."
+title: "IMEXLBM: A Portable Lattice-Boltzmann Solver for Heterogeneous Platforms"
+abstract: >-
+  A single-phase lattice-Boltzmann solver (D3Q27, MPI domain decomposition)
+  built on the Kokkos performance-portability library. One source set builds
+  for CUDA, HIP and SYCL; the backend is selected entirely by which Kokkos
+  build is linked. Includes machine-specific build and job configurations for
+  ALCF Polaris, ALCF Aurora and OLCF Frontier.
+type: software
+license: BSD-3-Clause
+repository-code: "https://github.com/Maccchiatooo/IMEXLBM"
+version: 1.0.1
+date-released: 2026-08-10
+# Concept DOI: always resolves to the newest archived version. Use this when
+# referring to the software in general; use the version DOI under `identifiers`
+# when a reader needs the exact snapshot your results came from.
+doi: 10.5281/zenodo.21866050
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.21866051
+    description: "Archived snapshot of v1.0.0"
+keywords:
+  - lattice Boltzmann method
+  - computational fluid dynamics
+  - performance portability
+  - Kokkos
+  - GPU
+  - exascale
+
+# Authors of the software. Add anyone who contributed code; the full author
+# list of the paper is under preferred-citation below.
+authors:
+  - family-names: Zhao
+    given-names: Chunheng
+    orcid: "https://orcid.org/0000-0002-8894-9418"
+
+preferred-citation:
+  type: conference-paper
+  title: "IMEXLBM: A portable lattice-Boltzmann solver for heterogeneous platforms"
+  year: 2025
+  collection-title: "Fluids Engineering Division Summer Meeting"
+  volume: 88995
+  pages: "V001T03A016"
+  publisher:
+    name: "American Society of Mechanical Engineers"
+  authors:
+    - family-names: Zhao
+      given-names: Chunheng
+    - family-names: Patel
+      given-names: Saumil
+    - family-names: Balakrishnan
+      given-names: Ramesh
+    - family-names: Lee
+      given-names: Taehun
