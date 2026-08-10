@@ -182,7 +182,7 @@ If IMEXLBM contributed to published work, please cite the paper:
 > Zhao, C., Patel, S., Balakrishnan, R. and Lee, T., 2025. IMEXLBM: A portable
 > lattice-Boltzmann solver for heterogeneous platforms. In *Fluids Engineering
 > Division Summer Meeting* (Vol. 88995, p. V001T03A016). American Society of
-> Mechanical Engineers.
+> Mechanical Engineers. [doi:10.1115/FEDSM2025-158589](https://doi.org/10.1115/FEDSM2025-158589)
 
 To cite the software itself, use the DOI of the exact version you ran — a
 reproducer needs that snapshot, not whatever `main` looks like later. The badge

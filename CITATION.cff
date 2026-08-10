@@ -18,8 +18,8 @@ date-released: 2026-08-10
 doi: 10.5281/zenodo.21866050
 identifiers:
   - type: doi
-    value: 10.5281/zenodo.21866051
-    description: "Archived snapshot of v1.0.0"
+    value: 10.5281/zenodo.21866231
+    description: "Archived snapshot of v1.0.2"
 keywords:
   - lattice Boltzmann method
   - computational fluid dynamics
@@ -37,6 +37,7 @@ authors:
 
 preferred-citation:
   type: conference-paper
+  doi: 10.1115/FEDSM2025-158589
   title: "IMEXLBM: A portable lattice-Boltzmann solver for heterogeneous platforms"
   year: 2025
   collection-title: "Fluids Engineering Division Summer Meeting"
