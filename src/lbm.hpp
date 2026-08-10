@@ -197,6 +197,11 @@ struct LBM
     void MPIoutput(int n);
     void Output(int n);
 
+    // Globally reduced conserved quantities; see the definition in lbm.cpp for
+    // why mass and momentum are exact invariants of the discrete dynamics.
+    void Conserved(double &mass, double &mom_x, double &mom_y, double &mom_z,
+                   double &ke);
+
     void pack_f(buffer_f ff);
     void unpack_f(buffer_f ff);
 

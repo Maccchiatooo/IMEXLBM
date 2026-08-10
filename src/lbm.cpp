@@ -239,6 +239,72 @@ void LBM::ComputeMacroscopic()
     LBM_PROF_END(P_MACRO);
 };
 
+// ---------------------------------------------------------------------------
+// Globally reduced diagnostics.
+//
+// In this pressure-based formulation sum_i f_i = 3p and sum_i f_i e_i = u, and
+// the equilibrium reproduces both moments exactly. With sum_i t_i = 1,
+// sum_i t_i e_i = 0 and sum_i t_i e_ia e_ib = delta_ab / 3:
+//
+//     sum_i feq_i     = 3p + 4.5*(u^2/3) - 1.5*u^2 = 3p = sum_i f_i
+//     sum_i feq_i e_i = 3 u_b delta_ab / 3         = u_a = sum_i f_i e_i
+//
+// so BGK collision leaves both untouched, and streaming on a fully periodic
+// domain is a permutation of f. Mass and momentum are therefore invariants of
+// the discrete dynamics up to floating-point rounding. A relative drift much
+// larger than 1e-12 is a bug -- in streaming, in the halo exchange, or a race --
+// not "numerical error".
+//
+// ke is NOT conserved: dissipating it is what the Taylor-Green vortex is for.
+// It is reported so a test can check that it decays, and that its trajectory
+// does not depend on how the domain was split across ranks.
+//
+// Cost is one 5-double MPI_Allreduce per call. The caller already issues an
+// MPI_Barrier at the same cadence, so the marginal cost is in the noise even
+// at full machine scale.
+// ---------------------------------------------------------------------------
+void LBM::Conserved(double &mass, double &mom_x, double &mom_y, double &mom_z,
+                    double &ke)
+{
+    double lmass = 0.0, lmx = 0.0, lmy = 0.0, lmz = 0.0, lke = 0.0;
+
+    Kokkos::parallel_reduce(
+        "conserved",
+        mdrange_policy3({l_s[0], l_s[1], l_s[2]}, {l_e[0], l_e[1], l_e[2]}),
+        KOKKOS_CLASS_LAMBDA(const int i, const int j, const int k,
+                            double &m, double &mx, double &my, double &mz,
+                            double &e_kin) {
+            double pl = 0.0, ul = 0.0, vl = 0.0, wl = 0.0;
+            for (int ii = 0; ii < Q27; ++ii)
+            {
+                const double fv = f(ii, i, j, k);
+                pl += fv;
+                ul += fv * e(ii, 0);
+                vl += fv * e(ii, 1);
+                wl += fv * e(ii, 2);
+            }
+            m += pl;
+            mx += ul;
+            my += vl;
+            mz += wl;
+            e_kin += 0.5 * (ul * ul + vl * vl + wl * wl);
+        },
+        Kokkos::Sum<double>(lmass), Kokkos::Sum<double>(lmx),
+        Kokkos::Sum<double>(lmy), Kokkos::Sum<double>(lmz),
+        Kokkos::Sum<double>(lke));
+    Kokkos::fence();
+
+    double local[5] = {lmass, lmx, lmy, lmz, lke};
+    double total[5];
+    MPI_Allreduce(local, total, 5, MPI_DOUBLE, MPI_SUM, comm);
+
+    mass = total[0];
+    mom_x = total[1];
+    mom_y = total[2];
+    mom_z = total[3];
+    ke = total[4];
+};
+
 void LBM::MPIoutput(int n)
 {
     // MPI_IO

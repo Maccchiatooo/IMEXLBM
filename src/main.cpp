@@ -79,7 +79,23 @@ if (l1.me == 0) {
                     printf("step %6d | interval %8.4f s | total %8.4f s | %10.2f MLUPS\n",
                            it, dt_int, now - start, mlups);
                 }
-                t_last = now;
+
+                // Collective: every rank must call it. Mass and momentum are
+                // exact invariants of the discrete dynamics (see LBM::Conserved),
+                // so a drift here is a bug, not rounding. Deliberately printed on
+                // its own line with no "MLUPS" token, because tools/parse_scaling.sh
+                // selects lines with awk '/MLUPS/'.
+                double mass, px, py, pz, ke;
+                l1.Conserved(mass, px, py, pz, ke);
+                if (l1.me == 0)
+                {
+                    printf("cons  step %6d | mass %.15e | px %.15e | py %.15e | pz %.15e | ke %.15e\n",
+                           it, mass, px, py, pz, ke);
+                }
+
+                // Re-taken after the diagnostic so its cost is not charged to
+                // the next interval's MLUPS.
+                t_last = MPI_Wtime();
                 // l1.MPIoutput(it / s1.inter);
             }
         }
