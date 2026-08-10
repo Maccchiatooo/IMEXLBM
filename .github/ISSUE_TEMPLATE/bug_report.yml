@@ -1,0 +1,98 @@
+name: Bug report
+description: Something builds wrong, crashes, or produces a wrong answer
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The five fields below (machine, backend, Kokkos, compiler, ranks) are
+        usually most of the diagnosis. A report without them is rarely
+        actionable, because the same source builds against three different
+        vendor toolchains.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you expected, and what you got instead.
+      placeholder: |
+        Expected the regression test to pass. `mass conserved on 4 rank(s)`
+        fails with a drift of 3e-9, but 1 and 2 ranks are fine.
+    validations:
+      required: true
+
+  - type: input
+    id: machine
+    attributes:
+      label: Machine
+      description: Aurora, Polaris, Frontier, or your own machine (say which OS).
+      placeholder: Frontier (OLCF)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Kokkos backend
+      options:
+        - SYCL (Aurora)
+        - CUDA (Polaris)
+        - HIP (Frontier)
+        - OpenMP (CPU)
+        - Serial (CPU)
+    validations:
+      required: true
+
+  - type: input
+    id: kokkos
+    attributes:
+      label: Kokkos version
+      description: "`module list` on the machines, or the tag you built."
+      placeholder: "5.1.1"
+    validations:
+      required: true
+
+  - type: input
+    id: compiler
+    attributes:
+      label: Compiler and version
+      placeholder: "amdclang++ 18.0.0 (via CC)"
+    validations:
+      required: true
+
+  - type: input
+    id: ranks
+    attributes:
+      label: Ranks and nodes
+      description: Whether it also happens on one rank is often the whole answer.
+      placeholder: "8 ranks on 1 node; also fails at 2 ranks, passes at 1"
+    validations:
+      required: true
+
+  - type: textarea
+    id: input-deck
+    attributes:
+      label: input.in
+      description: The exact deck used. Rendered as code, no backticks needed.
+      render: text
+      placeholder: |
+        1.0  0.1  1600
+        0.05  20  1
+        256  256  256
+
+  - type: textarea
+    id: how-built
+    attributes:
+      label: How it was built
+      description: The make or cmake command line, and the env script if any.
+      render: shell
+      placeholder: |
+        source env_frontier.sh
+        make -f Makefile.frontier
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: Error message, stack trace, or the failing diagnostic lines.
+      render: text
