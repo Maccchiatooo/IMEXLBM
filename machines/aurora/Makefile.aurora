@@ -1,0 +1,99 @@
+# Aurora build — prebuilt Kokkos module, SYCL AOT (Intel PVC / Max 1550)
+#
+#   source env_aurora.sh          # modules + KOKKOS_ROOT + runtime knobs
+#   make -f Makefile.aurora
+#
+# Flags follow the ALCF "Building a Kokkos Application Using make" recipe.
+# The centrally-built Kokkos module is SYCL *AOT* (ahead-of-time), so this build
+# must be AOT too (-fsycl-targets=spir64_gen + -device pvc). A JIT build
+# (-fsycl-targets=spir64) links but mismatches the module's device image.
+#
+# NOTE: KOKKOS_ROOT, not KOKKOS_HOME. That is the variable `module load kokkos`
+# actually sets on Aurora (Polaris/Frontier used KOKKOS_HOME). The module also
+# prepends to CPATH / LIBRARY_PATH / LD_LIBRARY_PATH, so the -I / -L below are
+# strictly redundant — they are kept explicit to match the other machines and
+# to fail loudly if the module was not loaded.
+
+# SCALING=1 builds a separate binary with main.cpp's per-step collision timing
+# compiled out. That instrumentation (a fence pair + printf every step) costs
+# tens of microseconds per step and would dominate the measurement once the
+# per-rank subdomain gets small, so scaling runs must not use the default build.
+# Separate TAG => separate objects and exe, so both can coexist.
+#   make -f Makefile.aurora              -> LBM3D_aurora
+#   make -f Makefile.aurora SCALING=1    -> LBM3D_aurora_scaling
+ifdef SCALING
+TAG            = _scaling
+EXTRA_CPPFLAGS = -DLBM_NO_PERSTEP_TIMING
+endif
+
+# PROFILE=1 builds the per-phase profiler (profile.hpp / profile.cpp): collision,
+# pack faces/edges/corners, pack fence, MPI post, MPI wait, unpack, stream
+# enqueue, stream fence. It implies LBM_NO_PERSTEP_TIMING so the old per-step
+# collision printf does not double-count, and it adds ONE fence after Collision
+# to make that kernel attributable.
+# That fence means a PROFILE build is NOT a throughput build -- read the phase
+# breakdown from it, read MLUPS from the SCALING build.
+#   make -f Makefile.aurora PROFILE=1  -> LBM3D_aurora_profile
+ifdef PROFILE
+TAG            = _profile
+EXTRA_CPPFLAGS = -DLBM_PROFILE -DLBM_NO_PERSTEP_TIMING
+endif
+
+EXE_NAME = LBM3D_aurora$(TAG)
+SRC      = $(wildcard *.cpp)
+OBJS     = $(SRC:.cpp=.aurora$(TAG).o)
+
+# Aurora MPICH wrapper over icpx. -cxx=icpx is required: the bare wrapper does
+# not default to the oneAPI C++ driver that -fsycl needs.
+CXX = mpic++ -cxx=icpx
+
+# Ahead-of-time SYCL for PVC. -fsycl-unnamed-lambda is required by Kokkos'
+# lambda dispatch; the id-queries / dead-args flags are the ALCF-recommended
+# codegen settings for Kokkos on PVC.
+SYCL_AOT_CPPFLAGS = \
+    -fsycl -fsycl-targets=spir64_gen \
+    -fno-sycl-id-queries-fit-in-int \
+    -fsycl-dead-args-optimization \
+    -fsycl-unnamed-lambda
+
+# -device pvc selects the Max-series target for the AOT backend compiler.
+SYCL_AOT_LDFLAGS = -Xsycl-target-backend "-device pvc"
+
+# -ffp-model=precise matches how the central Kokkos module was built
+# (-fp-model=precise). Dropping it lets icpx reassociate the 27-term reductions
+# in Collision/ComputeMacroscopic and changes results vs. Polaris/Frontier.
+# The -Wno-* set silences known-noisy warnings from the Kokkos headers.
+CPPFLAGS = \
+    -O3 -std=c++17 \
+    -fiopenmp \
+    -ffp-model=precise \
+    $(SYCL_AOT_CPPFLAGS) \
+    -I$(KOKKOS_ROOT)/include \
+    -Wno-deprecated-declarations \
+    -Wno-tautological-constant-compare \
+    -Wno-unknown-attributes \
+    $(EXTRA_CPPFLAGS) \
+    $(USER_CPPFLAGS)
+
+LDFLAGS = $(CPPFLAGS) $(SYCL_AOT_LDFLAGS)
+
+LDLIBS = \
+    -L$(KOKKOS_ROOT)/lib64 \
+    -lkokkoscore \
+    -lkokkossimd \
+    -lkokkoscontainers \
+    -lpthread
+
+default: $(EXE_NAME)
+	@echo "Build complete: $(EXE_NAME)"
+
+$(EXE_NAME): $(OBJS)
+	$(CXX) $(LDFLAGS) -o $(EXE_NAME) $(OBJS) $(LDLIBS)
+
+%.aurora$(TAG).o: %.cpp
+	$(CXX) $(CPPFLAGS) -c $< -o $@
+
+clean:
+	rm -f $(OBJS) $(EXE_NAME)
+
+.PHONY: default clean

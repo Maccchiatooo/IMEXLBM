@@ -1,0 +1,78 @@
+# Polaris build — pre-built Kokkos module (NVIDIA A100, Ampere80)
+#
+# Load modules before building:
+#   module restore
+#   module load craype-x86-milan
+#   module load PrgEnv-nvidia
+#   module use /soft/modulefiles
+#   module load kokkos/4.6.02_shared_PE-nv8.6.0_gcvdefault_ctkdefault
+#   module load craype-accel-nvidia80  (optional, needed only for GPU-aware MPI)
+#
+# KOKKOS_HOME is set automatically by "module load kokkos"
+# Build: make -f Makefile.polaris
+
+# SCALING=1 compiles out main.cpp's per-step collision timing (a fence pair +
+# printf every step), which would otherwise dominate the measurement once the
+# per-rank subdomain gets small. PROFILE=1 builds the per-phase profiler
+# (profile.hpp/cpp) and adds two fences to make phases attributable, so it is
+# NOT a throughput build. Separate TAG => separate objects and exe, so all
+# three can coexist.
+#   make -f Makefile.polaris             -> LBM3D_polaris
+#   make -f Makefile.polaris SCALING=1   -> LBM3D_polaris_scaling
+#   make -f Makefile.polaris PROFILE=1   -> LBM3D_polaris_profile
+ifdef SCALING
+TAG            = _scaling
+EXTRA_CPPFLAGS = -DLBM_NO_PERSTEP_TIMING
+endif
+ifdef PROFILE
+TAG            = _profile
+EXTRA_CPPFLAGS = -DLBM_PROFILE -DLBM_NO_PERSTEP_TIMING
+endif
+
+EXE_NAME = LBM3D_polaris$(TAG)
+# mpi_gpu_bw.cpp is a standalone MPI probe with its own main(); keep it out of
+# the solver's object list.
+SRC      = $(filter-out mpi_gpu_bw.cpp,$(wildcard *.cpp))
+OBJS     = $(SRC:.cpp=.polaris$(TAG).o)
+
+# Cray MPI wrapper over nvc++ (PrgEnv-nvidia); -cuda enables CUDA compilation
+CXX = CC
+
+CPPFLAGS = \
+    -O3 -std=c++17 \
+    -cuda -gpu=cc80,nordc -fopenmp \
+    -I$(KOKKOS_HOME)/include \
+    $(EXTRA_CPPFLAGS) \
+    $(USER_CPPFLAGS)
+
+LDFLAGS = -cuda -gpu=cc80,nordc -fopenmp
+
+# $(GTL_FLAGS) is exported by env.sh and carries the CUDA GPU Transport Layer
+# (-lmpi_gtl_cuda). It is REQUIRED: exchange_f() hands device pointers to MPI.
+# We link it explicitly rather than relying on `module load
+# craype-accel-nvidia80`, which on Polaris often refuses to load because it
+# tests for a module named "cudatoolkit" while ALCF ships
+# "cudatoolkit-standalone". If the module did load, the wrapper adds the same
+# library and the duplicate is harmless.
+LDLIBS = \
+    -L$(KOKKOS_HOME)/lib64 \
+    -lkokkoscore \
+    -lkokkossimd \
+    $(GTL_FLAGS) \
+    -lpthread
+
+default: $(EXE_NAME)
+	@echo "Build complete: $(EXE_NAME)"
+
+$(EXE_NAME): $(OBJS)
+	$(CXX) $(LDFLAGS) -o $(EXE_NAME) $(OBJS) $(LDLIBS)
+
+%.polaris$(TAG).o: %.cpp
+	$(CXX) $(CPPFLAGS) -c $< -o $@
+
+clean:
+	rm -f $(OBJS) $(EXE_NAME)
+
+# Standalone GPU-aware MPI bandwidth probe (see mpi_gpu_bw.cpp).
+mpi_gpu_bw: mpi_gpu_bw.cpp
+	$(CXX) $(CPPFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
